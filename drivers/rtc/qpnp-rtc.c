@@ -101,7 +101,7 @@ qpnp_rtc_set_time(struct device *dev, struct rtc_time *tm)
 {
 	int rc;
 	unsigned long secs, irq_flags;
-	u8 value[4], reg = 0, alarm_enabled = 0, ctrl_reg;
+	u8 value[4], reg = 0, alarm_enabled = 0, ctrl_reg, en;
 	struct qpnp_rtc *rtc_dd = dev_get_drvdata(dev);
 
 	rtc_tm_to_time(tm, &secs);
@@ -152,6 +152,15 @@ qpnp_rtc_set_time(struct device *dev, struct rtc_time *tm)
 	 * write operation
 	 */
 
+	/* Disable RTC_WC_EN_CTL1 */
+	en = 0;
+	rc = qpnp_write_wrapper(rtc_dd, &en,
+		rtc_dd->rtc_base + REG_OFFSET_ALARM_CTRL1, 1);
+	if (rc) {
+		pr_info("QPNP_RTC_SET_TIME disable EN fail " );
+		goto rtc_rw_fail;
+	}
+
 	/* Clear WDATA[0] */
 	reg = 0x0;
 	rc = qpnp_write_wrapper(rtc_dd, &reg,
@@ -174,6 +183,15 @@ qpnp_rtc_set_time(struct device *dev, struct rtc_time *tm)
 				rtc_dd->rtc_base + REG_OFFSET_RTC_WRITE, 1);
 	if (rc) {
 		dev_err(dev, "Write to RTC reg failed\n");
+		goto rtc_rw_fail;
+	}
+
+	/* Enable RTC_WC_EN_CTL1 */
+	en = 0x80;
+	rc = qpnp_write_wrapper(rtc_dd, &en,
+		rtc_dd->rtc_base + REG_OFFSET_ALARM_CTRL1, 1);
+	if (rc) {
+		pr_info("QPNP_RTC_SET_TIME Enable EN fail " );
 		goto rtc_rw_fail;
 	}
 

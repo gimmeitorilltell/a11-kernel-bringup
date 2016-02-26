@@ -42,8 +42,6 @@
 #define TAPAN_HPH_PA_SETTLE_COMP_ON 3000
 #define TAPAN_HPH_PA_SETTLE_COMP_OFF 13000
 
-#define DAPM_MICBIAS2_EXTERNAL_STANDALONE "MIC BIAS2 External Standalone"
-
 #define TAPAN_VDD_CX_OPTIMAL_UA 10000
 #define TAPAN_VDD_CX_SLEEP_UA 2000
 
@@ -283,8 +281,6 @@ struct tapan_priv {
 	s32 dmic_1_2_clk_cnt;
 	s32 dmic_3_4_clk_cnt;
 	s32 dmic_5_6_clk_cnt;
-	s32 ldo_h_users;
-	s32 micb_2_users;
 
 	u32 anc_slot;
 	bool anc_func;
@@ -1073,6 +1069,10 @@ static int tapan_hph_impedance_get(struct snd_kcontrol *kcontrol,
 	struct soc_multi_mixer_control *mc;
 	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
 	struct tapan_priv *priv = snd_soc_codec_get_drvdata(codec);
+	//htc audio ++ disable QCT sense impedance function to avoid kernel panic
+	ucontrol->value.integer.value[0] = 0;
+	return 0;
+	//htc audio --
 
 	mc = (struct soc_multi_mixer_control *)(kcontrol->private_value);
 
@@ -1085,6 +1085,11 @@ static int tapan_hph_impedance_get(struct snd_kcontrol *kcontrol,
 }
 
 static const struct snd_kcontrol_new tapan_common_snd_controls[] = {
+
+//htc audio ++
+	SOC_SINGLE_EXT("MIC_BIAS1_Bypass Cap", TAPAN_A_MICB_1_CTL, 0, 0, 0, htc_micbias_capless_get, htc_micbias_capless),
+	SOC_SINGLE_EXT("MIC_BIAS2_Bypass Cap", TAPAN_A_MICB_2_CTL, 0, 0, 0, htc_micbias_capless_get, htc_micbias_capless),
+//htc audio --
 
 	SOC_ENUM_EXT("EAR PA Gain", tapan_ear_pa_gain_enum[0],
 		tapan_pa_gain_get, tapan_pa_gain_put),
@@ -1145,27 +1150,6 @@ static const struct snd_kcontrol_new tapan_common_snd_controls[] = {
 	SOC_ENUM("RX2 HPF cut off", cf_rxmix2_enum),
 	SOC_ENUM("RX3 HPF cut off", cf_rxmix3_enum),
 
-	SOC_SINGLE_EXT("IIR1 Enable Band1", IIR1, BAND1, 1, 0,
-	tapan_get_iir_enable_audio_mixer, tapan_put_iir_enable_audio_mixer),
-	SOC_SINGLE_EXT("IIR1 Enable Band2", IIR1, BAND2, 1, 0,
-	tapan_get_iir_enable_audio_mixer, tapan_put_iir_enable_audio_mixer),
-	SOC_SINGLE_EXT("IIR1 Enable Band3", IIR1, BAND3, 1, 0,
-	tapan_get_iir_enable_audio_mixer, tapan_put_iir_enable_audio_mixer),
-	SOC_SINGLE_EXT("IIR1 Enable Band4", IIR1, BAND4, 1, 0,
-	tapan_get_iir_enable_audio_mixer, tapan_put_iir_enable_audio_mixer),
-	SOC_SINGLE_EXT("IIR1 Enable Band5", IIR1, BAND5, 1, 0,
-	tapan_get_iir_enable_audio_mixer, tapan_put_iir_enable_audio_mixer),
-	SOC_SINGLE_EXT("IIR2 Enable Band1", IIR2, BAND1, 1, 0,
-	tapan_get_iir_enable_audio_mixer, tapan_put_iir_enable_audio_mixer),
-	SOC_SINGLE_EXT("IIR2 Enable Band2", IIR2, BAND2, 1, 0,
-	tapan_get_iir_enable_audio_mixer, tapan_put_iir_enable_audio_mixer),
-	SOC_SINGLE_EXT("IIR2 Enable Band3", IIR2, BAND3, 1, 0,
-	tapan_get_iir_enable_audio_mixer, tapan_put_iir_enable_audio_mixer),
-	SOC_SINGLE_EXT("IIR2 Enable Band4", IIR2, BAND4, 1, 0,
-	tapan_get_iir_enable_audio_mixer, tapan_put_iir_enable_audio_mixer),
-	SOC_SINGLE_EXT("IIR2 Enable Band5", IIR2, BAND5, 1, 0,
-	tapan_get_iir_enable_audio_mixer, tapan_put_iir_enable_audio_mixer),
-
 	SOC_SINGLE_MULTI_EXT("IIR1 Band1", IIR1, BAND1, 255, 0, 5,
 	tapan_get_iir_band_audio_mixer, tapan_put_iir_band_audio_mixer),
 	SOC_SINGLE_MULTI_EXT("IIR1 Band2", IIR1, BAND2, 255, 0, 5,
@@ -1186,6 +1170,27 @@ static const struct snd_kcontrol_new tapan_common_snd_controls[] = {
 	tapan_get_iir_band_audio_mixer, tapan_put_iir_band_audio_mixer),
 	SOC_SINGLE_MULTI_EXT("IIR2 Band5", IIR2, BAND5, 255, 0, 5,
 	tapan_get_iir_band_audio_mixer, tapan_put_iir_band_audio_mixer),
+
+	SOC_SINGLE_EXT("IIR1 Enable Band1", IIR1, BAND1, 1, 0,
+	tapan_get_iir_enable_audio_mixer, tapan_put_iir_enable_audio_mixer),
+	SOC_SINGLE_EXT("IIR1 Enable Band2", IIR1, BAND2, 1, 0,
+	tapan_get_iir_enable_audio_mixer, tapan_put_iir_enable_audio_mixer),
+	SOC_SINGLE_EXT("IIR1 Enable Band3", IIR1, BAND3, 1, 0,
+	tapan_get_iir_enable_audio_mixer, tapan_put_iir_enable_audio_mixer),
+	SOC_SINGLE_EXT("IIR1 Enable Band4", IIR1, BAND4, 1, 0,
+	tapan_get_iir_enable_audio_mixer, tapan_put_iir_enable_audio_mixer),
+	SOC_SINGLE_EXT("IIR1 Enable Band5", IIR1, BAND5, 1, 0,
+	tapan_get_iir_enable_audio_mixer, tapan_put_iir_enable_audio_mixer),
+	SOC_SINGLE_EXT("IIR2 Enable Band1", IIR2, BAND1, 1, 0,
+	tapan_get_iir_enable_audio_mixer, tapan_put_iir_enable_audio_mixer),
+	SOC_SINGLE_EXT("IIR2 Enable Band2", IIR2, BAND2, 1, 0,
+	tapan_get_iir_enable_audio_mixer, tapan_put_iir_enable_audio_mixer),
+	SOC_SINGLE_EXT("IIR2 Enable Band3", IIR2, BAND3, 1, 0,
+	tapan_get_iir_enable_audio_mixer, tapan_put_iir_enable_audio_mixer),
+	SOC_SINGLE_EXT("IIR2 Enable Band4", IIR2, BAND4, 1, 0,
+	tapan_get_iir_enable_audio_mixer, tapan_put_iir_enable_audio_mixer),
+	SOC_SINGLE_EXT("IIR2 Enable Band5", IIR2, BAND5, 1, 0,
+	tapan_get_iir_enable_audio_mixer, tapan_put_iir_enable_audio_mixer),
 
 	SOC_SINGLE_EXT("HPHL Impedance", 0, 0, UINT_MAX, 0,
 		       tapan_hph_impedance_get, NULL),
@@ -1502,6 +1507,14 @@ static int wcd9306_put_dec_enum(struct snd_kcontrol *kcontrol,
 		ret =  -EINVAL;
 		goto out;
 	}
+
+//htc audio ++ klocwork
+	if ((strpbrk(dec_name, "1234")) == NULL) {
+		pr_err("%s: Invalid decimator = %s\n", __func__, dec_name);
+		ret =  -EINVAL;
+		goto out;
+	}
+//htc audio --
 
 	ret = kstrtouint(strpbrk(dec_name, "1234"), 10, &decimator);
 	if (ret < 0) {
@@ -1993,6 +2006,12 @@ static int tapan_codec_enable_dmic(struct snd_soc_dapm_widget *w,
 	unsigned int dmic;
 	int ret;
 
+//htc audio ++ klocwork
+	if ((strpbrk(w->name, "1234")) == NULL) {
+		pr_err("%s: Invalid decimator = %s\n", __func__, w->name);
+		return  -EINVAL;
+	}
+//htc audio --
 	ret = kstrtouint(strpbrk(w->name, "1234"), 10, &dmic);
 	if (ret < 0) {
 		pr_err("%s: Invalid DMIC line on the codec\n", __func__);
@@ -2077,6 +2096,11 @@ static int tapan_codec_enable_anc(struct snd_soc_dapm_widget *w,
 			return -ENODEV;
 		}
 
+                if (fw == NULL) {
+                        dev_err(codec->dev, "%s fw is NULL\n", __func__);
+                        return -ENOMEM;
+                }
+
 		if (fw->size < sizeof(struct wcd9xxx_anc_header)) {
 			dev_err(codec->dev, "Not enough data\n");
 			release_firmware(fw);
@@ -2156,37 +2180,38 @@ static int tapan_codec_enable_micbias(struct snd_soc_dapm_widget *w,
 {
 	struct snd_soc_codec *codec = w->codec;
 	struct tapan_priv *tapan = snd_soc_codec_get_drvdata(codec);
-	u16 micb_int_reg = 0, micb_ctl_reg = 0;
+	u16 micb_int_reg;
 	u8 cfilt_sel_val = 0;
 	char *internal1_text = "Internal1";
 	char *internal2_text = "Internal2";
 	char *internal3_text = "Internal3";
 	enum wcd9xxx_notify_event e_post_off, e_pre_on, e_post_on;
 
-	pr_debug("%s: w->name %s event %d\n", __func__, w->name, event);
-	if (strnstr(w->name, "MIC BIAS1", sizeof("MIC BIAS1"))) {
-		micb_ctl_reg = TAPAN_A_MICB_1_CTL;
+	dev_dbg(codec->dev, "%s %d\n", __func__, event);
+	switch (w->reg) {
+	case TAPAN_A_MICB_1_CTL:
 		micb_int_reg = TAPAN_A_MICB_1_INT_RBIAS;
 		cfilt_sel_val = tapan->resmgr.pdata->micbias.bias1_cfilt_sel;
 		e_pre_on = WCD9XXX_EVENT_PRE_MICBIAS_1_ON;
 		e_post_on = WCD9XXX_EVENT_POST_MICBIAS_1_ON;
 		e_post_off = WCD9XXX_EVENT_POST_MICBIAS_1_OFF;
-	} else if (strnstr(w->name, "MIC BIAS2", sizeof("MIC BIAS2"))) {
-		micb_ctl_reg = TAPAN_A_MICB_2_CTL;
+		break;
+	case TAPAN_A_MICB_2_CTL:
 		micb_int_reg = TAPAN_A_MICB_2_INT_RBIAS;
 		cfilt_sel_val = tapan->resmgr.pdata->micbias.bias2_cfilt_sel;
 		e_pre_on = WCD9XXX_EVENT_PRE_MICBIAS_2_ON;
 		e_post_on = WCD9XXX_EVENT_POST_MICBIAS_2_ON;
 		e_post_off = WCD9XXX_EVENT_POST_MICBIAS_2_OFF;
-	} else if (strnstr(w->name, "MIC BIAS3", sizeof("MIC BIAS3"))) {
-		micb_ctl_reg = TAPAN_A_MICB_3_CTL;
+		break;
+	case TAPAN_A_MICB_3_CTL:
 		micb_int_reg = TAPAN_A_MICB_3_INT_RBIAS;
 		cfilt_sel_val = tapan->resmgr.pdata->micbias.bias3_cfilt_sel;
 		e_pre_on = WCD9XXX_EVENT_PRE_MICBIAS_3_ON;
 		e_post_on = WCD9XXX_EVENT_POST_MICBIAS_3_ON;
 		e_post_off = WCD9XXX_EVENT_POST_MICBIAS_3_OFF;
-	} else {
-		pr_err("%s: Error, invalid micbias %s\n", __func__, w->name);
+		break;
+	default:
+		pr_err("%s: Error, invalid micbias register\n", __func__);
 		return -EINVAL;
 	}
 
@@ -2205,20 +2230,6 @@ static int tapan_codec_enable_micbias(struct snd_soc_dapm_widget *w,
 		else if (strnstr(w->name, internal3_text, 30))
 			snd_soc_update_bits(codec, micb_int_reg, 0x3, 0x3);
 
-		if (micb_ctl_reg == TAPAN_A_MICB_2_CTL) {
-			if (++tapan->micb_2_users == 1)
-				wcd9xxx_resmgr_add_cond_update_bits(
-						&tapan->resmgr,
-						WCD9XXX_COND_HPH_MIC,
-						micb_ctl_reg, w->shift,
-						false);
-			pr_debug("%s: micb_2_users %d\n", __func__,
-				 tapan->micb_2_users);
-		} else
-			snd_soc_update_bits(codec, micb_ctl_reg, 1 << w->shift,
-						1 << w->shift);
-
-
 		break;
 	case SND_SOC_DAPM_POST_PMU:
 		usleep_range(20000, 20000);
@@ -2226,22 +2237,6 @@ static int tapan_codec_enable_micbias(struct snd_soc_dapm_widget *w,
 		wcd9xxx_resmgr_notifier_call(&tapan->resmgr, e_post_on);
 		break;
 	case SND_SOC_DAPM_POST_PMD:
-		if (micb_ctl_reg == TAPAN_A_MICB_2_CTL) {
-			if (--tapan->micb_2_users == 0)
-				wcd9xxx_resmgr_rm_cond_update_bits(
-						&tapan->resmgr,
-						WCD9XXX_COND_HPH_MIC,
-						micb_ctl_reg, 7,
-						false);
-			pr_debug("%s: micb_2_users %d\n", __func__,
-				 tapan->micb_2_users);
-			WARN(tapan->micb_2_users < 0,
-				"Unexpected micbias users %d\n",
-				tapan->micb_2_users);
-		} else
-			snd_soc_update_bits(codec, micb_ctl_reg, 1 << w->shift,
-					    0);
-
 		/* Let MBHC module know so micbias switch to be off */
 		wcd9xxx_resmgr_notifier_call(&tapan->resmgr, e_post_off);
 
@@ -2258,23 +2253,6 @@ static int tapan_codec_enable_micbias(struct snd_soc_dapm_widget *w,
 	}
 
 	return 0;
-}
-
-/* called under codec_resource_lock acquisition */
-static int tapan_enable_mbhc_micbias(struct snd_soc_codec *codec, bool enable)
-{
-	int rc;
-
-	if (enable)
-		rc = snd_soc_dapm_force_enable_pin(&codec->dapm,
-					     DAPM_MICBIAS2_EXTERNAL_STANDALONE);
-	else
-		rc = snd_soc_dapm_disable_pin(&codec->dapm,
-					     DAPM_MICBIAS2_EXTERNAL_STANDALONE);
-	if (!rc)
-		snd_soc_dapm_sync(&codec->dapm);
-	pr_debug("%s: leave ret %d\n", __func__, rc);
-	return rc;
 }
 
 static void tx_hpf_corner_freq_callback(struct work_struct *work)
@@ -2333,6 +2311,14 @@ static int tapan_codec_enable_dec(struct snd_soc_dapm_widget *w,
 		ret =  -EINVAL;
 		goto out;
 	}
+
+//htc audio ++ klocwork
+	if ((strpbrk(dec_name, "123456789")) == NULL) {
+		pr_err("%s: Invalid decimator = %s\n", __func__, dec_name);
+		ret =  -EINVAL;
+		goto out;
+	}
+//htc audio --
 
 	ret = kstrtouint(strpbrk(dec_name, "123456789"), 10, &decimator);
 	if (ret < 0) {
@@ -2491,66 +2477,16 @@ static int tapan_codec_enable_interpolator(struct snd_soc_dapm_widget *w,
 	return 0;
 }
 
-/* called under codec_resource_lock acquisition */
-static int __tapan_codec_enable_ldo_h(struct snd_soc_dapm_widget *w,
-				      struct snd_kcontrol *kcontrol, int event)
-{
-	struct snd_soc_codec *codec = w->codec;
-	struct tapan_priv *priv = snd_soc_codec_get_drvdata(codec);
-
-	pr_debug("%s: enter\n", __func__);
-	switch (event) {
-	case SND_SOC_DAPM_PRE_PMU:
-		/*
-		 * ldo_h_users is protected by codec->mutex, don't need
-		 * additional mutex
-		 */
-		if (++priv->ldo_h_users == 1) {
-			WCD9XXX_BG_CLK_LOCK(&priv->resmgr);
-			wcd9xxx_resmgr_get_bandgap(&priv->resmgr,
-						   WCD9XXX_BANDGAP_AUDIO_MODE);
-			wcd9xxx_resmgr_get_clk_block(&priv->resmgr,
-						     WCD9XXX_CLK_RCO);
-			snd_soc_update_bits(codec, TAPAN_A_LDO_H_MODE_1, 1 << 7,
-					    1 << 7);
-			wcd9xxx_resmgr_put_clk_block(&priv->resmgr,
-						     WCD9XXX_CLK_RCO);
-			WCD9XXX_BG_CLK_UNLOCK(&priv->resmgr);
-			pr_debug("%s: ldo_h_users %d\n", __func__,
-				 priv->ldo_h_users);
-			/* LDO enable requires 1ms to settle down */
-			usleep_range(1000, 1010);
-		}
-		break;
-	case SND_SOC_DAPM_POST_PMD:
-		if (--priv->ldo_h_users == 0) {
-			WCD9XXX_BG_CLK_LOCK(&priv->resmgr);
-			wcd9xxx_resmgr_get_clk_block(&priv->resmgr,
-						     WCD9XXX_CLK_RCO);
-			snd_soc_update_bits(codec, TAPAN_A_LDO_H_MODE_1, 1 << 7,
-					    0);
-			wcd9xxx_resmgr_put_clk_block(&priv->resmgr,
-						     WCD9XXX_CLK_RCO);
-			wcd9xxx_resmgr_put_bandgap(&priv->resmgr,
-						   WCD9XXX_BANDGAP_AUDIO_MODE);
-			WCD9XXX_BG_CLK_UNLOCK(&priv->resmgr);
-			pr_debug("%s: ldo_h_users %d\n", __func__,
-				 priv->ldo_h_users);
-		}
-		WARN(priv->ldo_h_users < 0, "Unexpected ldo_h users %d\n",
-		     priv->ldo_h_users);
-		break;
-	}
-	pr_debug("%s: leave\n", __func__);
-	return 0;
-}
-
 static int tapan_codec_enable_ldo_h(struct snd_soc_dapm_widget *w,
 	struct snd_kcontrol *kcontrol, int event)
 {
-	int rc;
-	rc = __tapan_codec_enable_ldo_h(w, kcontrol, event);
-	return rc;
+	switch (event) {
+	case SND_SOC_DAPM_POST_PMU:
+	case SND_SOC_DAPM_POST_PMD:
+		usleep_range(1000, 1000);
+		break;
+	}
+	return 0;
 }
 
 static int tapan_codec_enable_rx_bias(struct snd_soc_dapm_widget *w,
@@ -3123,7 +3059,6 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"MIC BIAS2 Internal2", NULL, "LDO_H"},
 	{"MIC BIAS2 Internal3", NULL, "LDO_H"},
 	{"MIC BIAS2 External", NULL, "LDO_H"},
-	{DAPM_MICBIAS2_EXTERNAL_STANDALONE, NULL, "LDO_H Standalone"},
 };
 
 static const struct snd_soc_dapm_route wcd9302_map[] = {
@@ -3252,6 +3187,57 @@ static unsigned int tapan_read(struct snd_soc_codec *codec,
 	return val;
 }
 
+//htc audio ++
+int htc_micbias_capless(struct snd_kcontrol *kcontrol,
+                struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_mixer_control *mc =
+		(struct soc_mixer_control *)kcontrol->private_value;
+
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+
+	dev_dbg(codec->dev, "%s: reg 0x%X, enabled %ld",
+		__func__, mc->reg, ucontrol->value.integer.value[0]);
+
+	if (ucontrol->value.integer.value[0]) {
+		snd_soc_update_bits(codec, mc->reg, 0x10, 0x00);
+	} else {
+		snd_soc_update_bits(codec, mc->reg, 0x10, 0x10);
+	}
+
+	return 1;
+}
+int htc_micbias_capless_get(struct snd_kcontrol *kcontrol,
+                struct snd_ctl_elem_value *ucontrol)
+{
+	struct soc_mixer_control *mc =
+		(struct soc_mixer_control *)kcontrol->private_value;
+
+	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
+
+	int reg_val = 0;
+	int reg_val_cap_bit = 0;
+
+	dev_dbg(codec->dev, "%s: reg 0x%X",
+		__func__, mc->reg);
+
+	reg_val = tapan_read(codec, mc->reg);
+	if((reg_val & 0x10))
+		reg_val_cap_bit = 0;
+	else
+		reg_val_cap_bit = 1;
+
+	ucontrol->value.integer.value[0] = reg_val_cap_bit;
+
+	dev_dbg(codec->dev, "%s: reg 0x%X, val 0x%X, reg_val_cap_bit %d",
+		__func__, mc->reg, reg_val, reg_val_cap_bit);
+
+	return 1;
+}
+
+//htc audio --
+
+
 static int tapan_startup(struct snd_pcm_substream *substream,
 		struct snd_soc_dai *dai)
 {
@@ -3276,7 +3262,7 @@ static void tapan_shutdown(struct snd_pcm_substream *substream,
 	dev_dbg(dai->codec->dev, "%s(): substream = %s  stream = %d\n",
 		 __func__, substream->name, substream->stream);
 
-	if (dai->id <= NUM_CODEC_DAIS) {
+	if (dai->id < NUM_CODEC_DAIS) {
 		if (tapan->dai[dai->id].ch_mask) {
 			active = 1;
 			dev_dbg(dai->codec->dev, "%s(): Codec DAI: chmask[%d] = 0x%lx\n",
@@ -4340,13 +4326,13 @@ static const struct snd_soc_dapm_widget tapan_9306_dapm_widgets[] = {
 		SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
 	SND_SOC_DAPM_MUX("ANC1 FB MUX", SND_SOC_NOPM, 0, 0, &anc1_fb_mux),
 
-	SND_SOC_DAPM_MICBIAS_E("MIC BIAS3 External", SND_SOC_NOPM, 7, 0,
+	SND_SOC_DAPM_MICBIAS_E("MIC BIAS3 External", TAPAN_A_MICB_3_CTL, 7, 0,
 		tapan_codec_enable_micbias, SND_SOC_DAPM_PRE_PMU |
 		SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_MICBIAS_E("MIC BIAS3 Internal1", SND_SOC_NOPM, 7, 0,
+	SND_SOC_DAPM_MICBIAS_E("MIC BIAS3 Internal1", TAPAN_A_MICB_3_CTL, 7, 0,
 		tapan_codec_enable_micbias, SND_SOC_DAPM_PRE_PMU |
 		SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_MICBIAS_E("MIC BIAS3 Internal2", SND_SOC_NOPM, 7, 0,
+	SND_SOC_DAPM_MICBIAS_E("MIC BIAS3 Internal2", TAPAN_A_MICB_3_CTL, 7, 0,
 		tapan_codec_enable_micbias, SND_SOC_DAPM_PRE_PMU |
 		SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
 
@@ -4569,27 +4555,17 @@ static const struct snd_soc_dapm_widget tapan_common_dapm_widgets[] = {
 		SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
 		SND_SOC_DAPM_PRE_PMD | SND_SOC_DAPM_POST_PMD),
 
-	SND_SOC_DAPM_SUPPLY("LDO_H", SND_SOC_NOPM, 7, 0,
-		tapan_codec_enable_ldo_h,
-		SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
-
-	/*
-	 * DAPM 'LDO_H Standalone' is to be powered by mbhc driver after
-	 * acquring codec_resource lock.
-	 * So call __tapan_codec_enable_ldo_h instead and avoid deadlock.
-	 */
-	SND_SOC_DAPM_SUPPLY("LDO_H Standalone", SND_SOC_NOPM, 7, 0,
-			    __tapan_codec_enable_ldo_h,
-			    SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
+	SND_SOC_DAPM_SUPPLY("LDO_H", TAPAN_A_LDO_H_MODE_1, 7, 0,
+		tapan_codec_enable_ldo_h, SND_SOC_DAPM_POST_PMU),
 
 	SND_SOC_DAPM_INPUT("AMIC1"),
-	SND_SOC_DAPM_MICBIAS_E("MIC BIAS1 External", SND_SOC_NOPM, 7, 0,
+	SND_SOC_DAPM_MICBIAS_E("MIC BIAS1 External", TAPAN_A_MICB_1_CTL, 7, 0,
 		tapan_codec_enable_micbias, SND_SOC_DAPM_PRE_PMU |
 		SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_MICBIAS_E("MIC BIAS1 Internal1", SND_SOC_NOPM, 7, 0,
+	SND_SOC_DAPM_MICBIAS_E("MIC BIAS1 Internal1", TAPAN_A_MICB_1_CTL, 7, 0,
 		tapan_codec_enable_micbias, SND_SOC_DAPM_PRE_PMU |
 		SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_MICBIAS_E("MIC BIAS1 Internal2", SND_SOC_NOPM, 7, 0,
+	SND_SOC_DAPM_MICBIAS_E("MIC BIAS1 Internal2", TAPAN_A_MICB_1_CTL, 7, 0,
 		tapan_codec_enable_micbias, SND_SOC_DAPM_PRE_PMU |
 		SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
 
@@ -4611,23 +4587,18 @@ static const struct snd_soc_dapm_widget tapan_common_dapm_widgets[] = {
 		SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
 
 	SND_SOC_DAPM_INPUT("AMIC2"),
-	SND_SOC_DAPM_MICBIAS_E("MIC BIAS2 External", SND_SOC_NOPM, 7, 0,
+	SND_SOC_DAPM_MICBIAS_E("MIC BIAS2 External", TAPAN_A_MICB_2_CTL, 7, 0,
 		tapan_codec_enable_micbias, SND_SOC_DAPM_PRE_PMU |
 		SND_SOC_DAPM_POST_PMU |	SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_MICBIAS_E("MIC BIAS2 Internal1", SND_SOC_NOPM, 7, 0,
+	SND_SOC_DAPM_MICBIAS_E("MIC BIAS2 Internal1", TAPAN_A_MICB_2_CTL, 7, 0,
 		tapan_codec_enable_micbias, SND_SOC_DAPM_PRE_PMU |
 		SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_MICBIAS_E("MIC BIAS2 Internal2", SND_SOC_NOPM, 7, 0,
+	SND_SOC_DAPM_MICBIAS_E("MIC BIAS2 Internal2", TAPAN_A_MICB_2_CTL, 7, 0,
 		tapan_codec_enable_micbias, SND_SOC_DAPM_PRE_PMU |
 		SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
-	SND_SOC_DAPM_MICBIAS_E("MIC BIAS2 Internal3", SND_SOC_NOPM, 7, 0,
+	SND_SOC_DAPM_MICBIAS_E("MIC BIAS2 Internal3", TAPAN_A_MICB_2_CTL, 7, 0,
 		tapan_codec_enable_micbias, SND_SOC_DAPM_PRE_PMU |
 		SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
-
-	SND_SOC_DAPM_MICBIAS_E(DAPM_MICBIAS2_EXTERNAL_STANDALONE, SND_SOC_NOPM,
-			       7, 0, tapan_codec_enable_micbias,
-			       SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
-			       SND_SOC_DAPM_POST_PMD),
 
 	SND_SOC_DAPM_AIF_OUT_E("AIF1 CAP", "AIF1 Capture", 0, SND_SOC_NOPM,
 		AIF1_CAP, 0, tapan_codec_enable_slimtx,
@@ -4752,9 +4723,11 @@ static int tapan_handle_pdata(struct tapan_priv *tapan)
 	struct snd_soc_codec *codec = tapan->codec;
 	struct wcd9xxx_pdata *pdata = tapan->resmgr.pdata;
 	int k1, k2, k3, rc = 0;
-	u8 txfe_bypass = pdata->amic_settings.txfe_enable;
-	u8 txfe_buff = pdata->amic_settings.txfe_buff;
-	u8 flag = pdata->amic_settings.use_pdata;
+//htc audio ++ klocwork
+	u8 txfe_bypass = 0;
+	u8 txfe_buff = 0;
+	u8 flag = 0;
+//htc audio --
 	u8 i = 0, j = 0;
 	u8 val_txfe = 0, value = 0;
 	u8 dmic_sample_rate_value = 0;
@@ -4766,7 +4739,11 @@ static int tapan_handle_pdata(struct tapan_priv *tapan)
 		rc = -ENODEV;
 		goto done;
 	}
-
+//htc audio ++ klocwork
+	txfe_bypass = pdata->amic_settings.txfe_enable;
+	txfe_buff = pdata->amic_settings.txfe_buff;
+	flag = pdata->amic_settings.use_pdata;
+//htc audio --
 	/* Make sure settings are correct */
 	if ((pdata->micbias.ldoh_v > WCD9XXX_LDOH_3P0_V) ||
 	    (pdata->micbias.bias1_cfilt_sel > WCD9XXX_CFILT3_SEL) ||
@@ -5020,6 +4997,7 @@ static const struct tapan_reg_mask_val tapan_2_x_reg_reset_values[] = {
 	TAPAN_REG_VAL(TAPAN_A_CDC_CLSH_V_PA_HD_HPH, 0x00),
 	TAPAN_REG_VAL(TAPAN_A_CDC_CLSH_V_PA_MIN_EAR, 0x00),
 	TAPAN_REG_VAL(TAPAN_A_CDC_CLSH_V_PA_MIN_HPH, 0x00),
+        TAPAN_REG_VAL(TAPAN_A_CDC_IIR1_GAIN_B1_CTL, 0xAC),
 };
 
 static const struct tapan_reg_mask_val tapan_1_0_reg_defaults[] = {
@@ -5583,7 +5561,11 @@ static const struct wcd9xxx_mbhc_intr cdc_intr_ids = {
 static int tapan_post_reset_cb(struct wcd9xxx *wcd9xxx)
 {
 	int ret = 0;
+//htc audio ++
+#if 0
 	int rco_clk_rate;
+#endif
+//htc audio --
 	struct snd_soc_codec *codec;
 	struct tapan_priv *tapan;
 
@@ -5619,6 +5601,9 @@ static int tapan_post_reset_cb(struct wcd9xxx *wcd9xxx)
 
 	wcd9xxx_resmgr_post_ssr(&tapan->resmgr);
 
+//htc audio ++
+#if 0
+
 	wcd9xxx_mbhc_deinit(&tapan->mbhc);
 
 	if (TAPAN_IS_1_0(wcd9xxx->version))
@@ -5626,14 +5611,16 @@ static int tapan_post_reset_cb(struct wcd9xxx *wcd9xxx)
 	else
 		rco_clk_rate = TAPAN_MCLK_CLK_9P6MHZ;
 
-	ret = wcd9xxx_mbhc_init(&tapan->mbhc, &tapan->resmgr, codec,
-				tapan_enable_mbhc_micbias,
+	ret = wcd9xxx_mbhc_init(&tapan->mbhc, &tapan->resmgr, codec, NULL,
 				&mbhc_cb, &cdc_intr_ids, rco_clk_rate,
 				TAPAN_CDC_ZDET_SUPPORTED);
 	if (ret)
 		pr_err("%s: mbhc init failed %d\n", __func__, ret);
 	else
 		wcd9xxx_mbhc_start(&tapan->mbhc, tapan->mbhc.mbhc_cfg);
+
+#endif
+//htc audio --
 
 	tapan_cleanup_irqs(tapan);
 	ret = tapan_setup_irqs(tapan);
@@ -5776,7 +5763,7 @@ static int tapan_codec_probe(struct snd_soc_codec *codec)
 	struct wcd9xxx *wcd9xxx;
 	struct snd_soc_dapm_context *dapm = &codec->dapm;
 	int ret = 0;
-	int i, rco_clk_rate;
+	int i; //HTC_AUD-, rco_clk_rate;
 	void *ptr = NULL;
 	struct wcd9xxx_core_resource *core_res;
 
@@ -5829,13 +5816,16 @@ static int tapan_codec_probe(struct snd_soc_codec *codec)
 		tapan->clsh_d.is_dynamic_vdd_cp = true;
 	wcd9xxx_clsh_init(&tapan->clsh_d, &tapan->resmgr);
 
+
+//htc audio ++
+#if 0
+
 	if (TAPAN_IS_1_0(control->version))
 		rco_clk_rate = TAPAN_MCLK_CLK_12P288MHZ;
 	else
 		rco_clk_rate = TAPAN_MCLK_CLK_9P6MHZ;
 
-	ret = wcd9xxx_mbhc_init(&tapan->mbhc, &tapan->resmgr, codec,
-				tapan_enable_mbhc_micbias,
+	ret = wcd9xxx_mbhc_init(&tapan->mbhc, &tapan->resmgr, codec, NULL,
 				&mbhc_cb, &cdc_intr_ids, rco_clk_rate,
 				TAPAN_CDC_ZDET_SUPPORTED);
 
@@ -5843,6 +5833,8 @@ static int tapan_codec_probe(struct snd_soc_codec *codec)
 		pr_err("%s: mbhc init failed %d\n", __func__, ret);
 		return ret;
 	}
+#endif
+//htc audio --
 
 	tapan->codec = codec;
 	for (i = 0; i < COMPANDER_MAX; i++) {
@@ -5853,8 +5845,6 @@ static int tapan_codec_probe(struct snd_soc_codec *codec)
 	tapan->aux_pga_cnt = 0;
 	tapan->aux_l_gain = 0x1F;
 	tapan->aux_r_gain = 0x1F;
-	tapan->ldo_h_users = 0;
-	tapan->micb_2_users = 0;
 	tapan_update_reg_defaults(codec);
 	tapan_update_reg_mclk_rate(wcd9xxx);
 	tapan_codec_init_reg(codec);
@@ -5958,8 +5948,13 @@ static int tapan_codec_remove(struct snd_soc_codec *codec)
 
 	tapan_cleanup_irqs(tapan);
 
+//htc audio ++
+#if 0
 	/* cleanup MBHC */
 	wcd9xxx_mbhc_deinit(&tapan->mbhc);
+#endif
+//htc audio --
+
 	/* cleanup resmgr */
 	wcd9xxx_resmgr_deinit(&tapan->resmgr);
 

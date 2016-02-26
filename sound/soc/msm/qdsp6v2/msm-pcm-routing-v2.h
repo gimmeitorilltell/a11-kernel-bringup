@@ -12,7 +12,9 @@
 #ifndef _MSM_PCM_ROUTING_H
 #define _MSM_PCM_ROUTING_H
 #include <sound/apr_audio-v2.h>
-
+//HTC_AUD ++
+#include <sound/pcm.h>
+//HTC_AUD --
 #define LPASS_BE_PRI_I2S_RX "PRIMARY_I2S_RX"
 #define LPASS_BE_PRI_I2S_TX "PRIMARY_I2S_TX"
 #define LPASS_BE_SLIMBUS_0_RX "SLIMBUS_0_RX"
@@ -166,4 +168,8 @@ int multi_ch_pcm_set_volume(unsigned volume);
 uint32_t get_adm_rx_topology(void);
 
 uint32_t get_adm_tx_topology(void);
+
+//htc audio++
+int msm_pcm_routing_get_port(struct snd_pcm_substream *substream, u16 *port_id);
+//htc audio --
 #endif /*_MSM_PCM_H*/

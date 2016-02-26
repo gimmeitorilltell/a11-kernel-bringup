@@ -18,7 +18,6 @@
 #include "kgsl_device.h"
 #include "kgsl_sharedmem.h"
 
-/*default log levels is error for everything*/
 #define KGSL_LOG_LEVEL_MAX     7
 
 struct dentry *kgsl_debugfs_dir;
@@ -30,9 +29,9 @@ static int pm_dump_set(void *data, u64 val)
 	struct kgsl_device *device = data;
 
 	if (val) {
-		mutex_lock(&device->mutex);
+		kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
 		kgsl_postmortem_dump(device, 1);
-		mutex_unlock(&device->mutex);
+		kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
 	}
 
 	return 0;
@@ -138,11 +137,6 @@ static int memfree_hist_print(struct seq_file *s, void *unused)
 	p = wptr;
 	for (;;) {
 		kgsl_get_memory_usage(str, sizeof(str), p->flags);
-		/*
-		 * if the ring buffer is not filled up yet
-		 * all its empty elems have size==0
-		 * just skip them ...
-		*/
 		if (p->size)
 			seq_printf(s, "%8d %08x %8d %11s\n",
 				p->pid, p->gpuaddr, p->size, str);
@@ -191,7 +185,7 @@ void kgsl_device_debugfs_init(struct kgsl_device *device)
 	debugfs_create_file("memfree_history", 0444, device->d_debugfs, device,
 				&memfree_hist_fops);
 
-	/* Create postmortem dump control files */
+	
 
 	pm_d_debugfs = debugfs_create_dir("postmortem", device->d_debugfs);
 
@@ -276,7 +270,7 @@ static int process_mem_print(struct seq_file *s, void *unused)
 		   "gpuaddr", "useraddr", "size", "id", "flags", "type",
 		   "usage", "sglen");
 
-	/* print all entries with a GPU address */
+	
 	spin_lock(&private->mem_lock);
 
 	for (node = rb_first(&private->mem_rb); node; node = rb_next(node)) {
@@ -285,7 +279,7 @@ static int process_mem_print(struct seq_file *s, void *unused)
 	}
 
 
-	/* now print all the unbound entries */
+	
 	while (1) {
 		entry = idr_get_next(&private->mem_idr, &next);
 		if (entry == NULL)
@@ -301,28 +295,43 @@ static int process_mem_print(struct seq_file *s, void *unused)
 
 static int process_mem_open(struct inode *inode, struct file *file)
 {
+	struct kgsl_process_private *private = NULL;
+	bool found = false;
+
+	
+	mutex_lock(&kgsl_driver.process_mutex);
+	list_for_each_entry(private, &kgsl_driver.process_list, list) {
+		if (private == inode->i_private) {
+			found = true;
+			atomic_inc(&((struct kgsl_process_private *)inode->i_private)->busy);
+			break;
+		}
+	}
+	mutex_unlock(&kgsl_driver.process_mutex);
+
+	if (!found) {
+		
+		pr_info("kgsl: %s: process was released\n", __func__);
+		return -EACCES;
+	}
+
 	return single_open(file, process_mem_print, inode->i_private);
+}
+
+static int process_mem_release(struct inode *inode, struct file *file)
+{
+	atomic_dec(&((struct kgsl_process_private *)inode->i_private)->busy);
+	return single_release(inode, file);
 }
 
 static const struct file_operations process_mem_fops = {
 	.open = process_mem_open,
 	.read = seq_read,
 	.llseek = seq_lseek,
-	.release = single_release,
+	.release = process_mem_release,
 };
 
 
-/**
- * kgsl_process_init_debugfs() - Initialize debugfs for a process
- * @private: Pointer to process private structure created for the process
- *
- * @returns: 0 on success, error code otherwise
- *
- * kgsl_process_init_debugfs() is called at the time of creating the
- * process struct when a process opens kgsl device for the first time.
- * The function creates the debugfs files for the process. If debugfs is
- * disabled in the kernel, we ignore that error and return as successful.
- */
 int
 kgsl_process_init_debugfs(struct kgsl_process_private *private)
 {
@@ -337,16 +346,9 @@ kgsl_process_init_debugfs(struct kgsl_process_private *private)
 	if (!private->debug_root)
 		return -EINVAL;
 
-	/*
-	 * debugfs_create_dir() and debugfs_create_file() both
-	 * return -ENODEV if debugfs is disabled in the kernel.
-	 * We make a distinction between these two functions
-	 * failing and debugfs being disabled in the kernel.
-	 * In the first case, we abort process private struct
-	 * creation, in the second we continue without any changes.
-	 * So if debugfs is disabled in kernel, return as
-	 * success.
-	 */
+	private->debug_root->d_inode->i_uid = proc_d_debugfs->d_inode->i_uid;
+	private->debug_root->d_inode->i_gid = proc_d_debugfs->d_inode->i_gid;
+
 	dentry = debugfs_create_file("mem", 0400, private->debug_root, private,
 			    &process_mem_fops);
 
@@ -355,6 +357,9 @@ kgsl_process_init_debugfs(struct kgsl_process_private *private)
 
 		if (ret == -ENODEV)
 			ret = 0;
+	} else if (dentry) {
+		dentry->d_inode->i_uid = proc_d_debugfs->d_inode->i_uid;
+		dentry->d_inode->i_gid = proc_d_debugfs->d_inode->i_gid;
 	}
 
 	return ret;

@@ -25,6 +25,13 @@
 
 #include "audio_acdb.h"
 
+//htc audio ++
+#undef pr_info
+#undef pr_err
+#define pr_info(fmt, ...) pr_aud_info(fmt, ##__VA_ARGS__)
+#define pr_err(fmt, ...) pr_aud_err(fmt, ##__VA_ARGS__)
+//htc audio --
+
 enum {
 	AFE_RX_CAL,
 	AFE_TX_CAL,
@@ -699,7 +706,7 @@ fail_cmd:
 
 void afe_send_cal(u16 port_id)
 {
-	pr_debug("%s\n", __func__);
+	pr_info("%s: port 0x%x\n", __func__,port_id);
 
 	if (afe_get_port_type(port_id) == MSM_AFE_PORT_TYPE_TX) {
 		afe_send_cal_spkr_prot_tx(port_id);
@@ -1273,7 +1280,7 @@ int afe_port_start(u16 port_id, union afe_port_config *afe_config,
 		ret = -EINVAL;
 		return ret;
 	}
-
+	pr_info("%s: port id: %#x rate %d\n", __func__, port_id,rate);
 	if ((port_id == RT_PROXY_DAI_001_RX) ||
 		(port_id == RT_PROXY_DAI_002_TX)) {
 		pr_debug("%s: before incrementing pcm_afe_instance %d"\
@@ -1300,7 +1307,7 @@ int afe_port_start(u16 port_id, union afe_port_config *afe_config,
 		port_id = VIRTUAL_ID_TO_PORTID(port_id);
 	}
 
-	pr_debug("%s: port id: %#x\n", __func__, port_id);
+	pr_info("%s: true port id: %#x rate %d\n", __func__, port_id,rate);
 
 	index = q6audio_get_port_index(port_id);
 	if (q6audio_validate_port(port_id) < 0) {
@@ -2848,7 +2855,7 @@ int afe_port_stop_nowait(int port_id)
 		ret = -EINVAL;
 		goto fail_cmd;
 	}
-	pr_debug("%s: port_id=%d\n", __func__, port_id);
+	pr_info("%s: port_id=%d\n", __func__, port_id);
 	port_id = q6audio_convert_virtual_to_portid(port_id);
 
 	stop.hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_SEQ_CMD,
@@ -2890,7 +2897,7 @@ int afe_close(int port_id)
 		ret = -EINVAL;
 		goto fail_cmd;
 	}
-	pr_debug("%s: port_id=%d\n", __func__, port_id);
+	pr_info("%s: port_id=0x%x\n", __func__, port_id);
 	if ((port_id == RT_PROXY_DAI_001_RX) ||
 			(port_id == RT_PROXY_DAI_002_TX)) {
 		pr_debug("%s: before decrementing pcm_afe_instance %d\n",
@@ -2916,7 +2923,7 @@ int afe_close(int port_id)
 		else
 			afe_close_done[port_id & 0x1] = true;
 	}
-
+	pr_info("%s: true port_id=0x%x\n", __func__, port_id);
 	port_id = q6audio_convert_virtual_to_portid(port_id);
 	index = q6audio_get_port_index(port_id);
 	if (q6audio_validate_port(port_id) < 0) {

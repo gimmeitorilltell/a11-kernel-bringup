@@ -43,6 +43,10 @@ MODULE_LICENSE("GPL v2");
 MODULE_VERSION("0.2");
 MODULE_ALIAS("platform:i2c_qup");
 
+int busy_recover_times;
+
+#define RECOVER_LIMIT 5
+
 /* QUP Registers */
 enum {
 	QUP_CONFIG              = 0x0,
@@ -192,10 +196,6 @@ struct qup_i2c_dev {
 	struct qup_i2c_clk_path_vote clk_path_vote;
 };
 
-#ifdef CONFIG_PM
-static int i2c_qup_pm_resume_runtime(struct device *device);
-#endif
-
 #ifdef DEBUG
 static void
 qup_print_status(struct qup_i2c_dev *dev)
@@ -223,8 +223,15 @@ qup_i2c_interrupt(int irq, void *devid)
 	uint32_t op_flgs = 0;
 	int err = 0;
 
-	if (pm_runtime_suspended(dev->dev))
-		return IRQ_NONE;
+	if (pm_runtime_suspended(dev->dev)) {
+		dev_dbg(dev->dev, "pm_runtime_suspended, irq:%d, writel_relaxed()"
+				   ", dev->adapter.nr = %d\n",
+				irq, dev->adapter.nr);
+		writel_relaxed(QUP_RESET_STATE, dev->base+QUP_STATE);
+                mb();
+                goto intr_done;
+		/*return IRQ_NONE;*/
+	}
 
 	status = readl_relaxed(dev->base + QUP_I2C_STATUS);
 	status1 = readl_relaxed(dev->base + QUP_ERROR_FLAGS);
@@ -871,12 +878,23 @@ static void qup_i2c_recover_bus_busy(struct qup_i2c_dev *dev)
 	uint32_t status = readl_relaxed(dev->base + QUP_I2C_STATUS);
 	struct gpiomux_setting old_gpio_setting[ARRAY_SIZE(i2c_rsrcs)];
 
-	if (dev->pdata->msm_i2c_config_gpio)
-		return;
+	busy_recover_times++;
 
-	if (!(status & (I2C_STATUS_BUS_ACTIVE)) ||
-		(status & (I2C_STATUS_BUS_MASTER)))
+	dev_info(dev->dev, "%s++: busy_recover_times = %d\n", __func__, busy_recover_times);
+
+	if ((busy_recover_times < RECOVER_LIMIT) && (dev->pdata->msm_i2c_config_gpio)) {
+		dev_info(dev->dev, "%s++: msm_i2c_config_gpio exists\n", __func__);
 		return;
+	}
+
+	if (busy_recover_times < RECOVER_LIMIT) {
+		if (!(status & (I2C_STATUS_BUS_ACTIVE)) ||
+		    (status & (I2C_STATUS_BUS_MASTER))) {
+			dev_info(dev->dev, "%s++: !(status & (I2C_STATUS_BUS_ACTIVE)) || "
+					   "(status & (I2C_STATUS_BUS_MASTER)), return\n", __func__);
+			return;
+		}
+	}
 
 	gpio_clk = dev->i2c_gpios[0];
 	gpio_dat = dev->i2c_gpios[1];
@@ -885,6 +903,8 @@ static void qup_i2c_recover_bus_busy(struct qup_i2c_dev *dev)
 		dev_err(dev->dev, "Recovery failed due to undefined GPIO's\n");
 		return;
 	}
+
+	busy_recover_times = 0;
 
 	disable_irq(dev->err_irq);
 	for (i = 0; i < ARRAY_SIZE(i2c_rsrcs); ++i) {
@@ -948,17 +968,12 @@ qup_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 	long timeout;
 	int err;
 
-	/* Alternate if runtime power management is disabled */
-	if (!pm_runtime_enabled(dev->dev)) {
-		dev_dbg(dev->dev, "Runtime PM is disabled\n");
-		i2c_qup_pm_resume_runtime(dev->dev);
-	} else {
-		pm_runtime_get_sync(dev->dev);
-	}
+	pm_runtime_get_sync(dev->dev);
 	mutex_lock(&dev->mlock);
 
 	if (dev->suspended) {
 		mutex_unlock(&dev->mlock);
+		dev_dbg(dev->dev, "I2C suspended\n");
 		return -EIO;
 	}
 
@@ -1370,12 +1385,14 @@ qup_i2c_probe(struct platform_device *pdev)
 	struct clk         *clk, *pclk;
 	int  ret = 0;
 	int  i;
-	int  dt_gpios[I2C_GPIOS_DT_CNT];
+	int  dt_gpios[I2C_GPIOS_DT_CNT] = {0};
 	bool use_device_tree = pdev->dev.of_node;
 	struct msm_i2c_platform_data *pdata;
 
+	busy_recover_times = 0;
+
 	gsbi_mem = NULL;
-	dev_dbg(&pdev->dev, "qup_i2c_probe\n");
+	dev_info(&pdev->dev, "qup_i2c_probe\n");
 
 	if (use_device_tree) {
 		pdata = devm_kzalloc(&pdev->dev, sizeof(*pdata), GFP_KERNEL);
@@ -1595,6 +1612,7 @@ blsp_core_init:
 			goto err_request_irq_failed;
 		}
 	}
+	dev_info(&pdev->dev, "irq = %d\n", dev->err_irq);
 	disable_irq(dev->err_irq);
 	if (dev->num_irqs == 3) {
 		disable_irq(dev->in_irq);
@@ -1731,7 +1749,10 @@ static int i2c_qup_pm_suspend_runtime(struct device *device)
 {
 	struct platform_device *pdev = to_platform_device(device);
 	struct qup_i2c_dev *dev = platform_get_drvdata(pdev);
-	dev_dbg(device, "pm_runtime: suspending...\n");
+
+	if (dev->adapter.nr == 1)
+		dev_dbg(device, "pm_runtime: suspending++, dev->adapter.nr = %d\n", dev->adapter.nr);
+
 	/* Grab mutex to ensure ongoing transaction is over */
 	mutex_lock(&dev->mlock);
 	dev->suspended = 1;
@@ -1740,6 +1761,10 @@ static int i2c_qup_pm_suspend_runtime(struct device *device)
 		qup_i2c_pwr_mgmt(dev, 0);
 		qup_i2c_free_gpios(dev);
 	}
+
+	if (dev->adapter.nr == 1)
+		dev_dbg(device, "pm_runtime: suspending--\n");
+
 	return 0;
 }
 
@@ -1748,14 +1773,23 @@ static int i2c_qup_pm_resume_runtime(struct device *device)
 	struct platform_device *pdev = to_platform_device(device);
 	struct qup_i2c_dev *dev = platform_get_drvdata(pdev);
 	int ret = 0;
-	dev_dbg(device, "pm_runtime: resuming...\n");
+
+	if (dev->adapter.nr == 1)
+		dev_dbg(device, "pm_runtime: resuming++, dev->adapter.nr = %d\n", dev->adapter.nr);
+
 	if (dev->pwr_state == 0) {
 		ret = qup_i2c_request_gpios(dev);
 		if (ret != 0)
 			return ret;
 		qup_i2c_pwr_mgmt(dev, 1);
 	}
+	mutex_lock(&dev->mlock);
 	dev->suspended = 0;
+	mutex_unlock(&dev->mlock);
+
+	if (dev->adapter.nr == 1)
+		dev_dbg(device, "pm_runtime: resuming--\n");
+
 	return 0;
 }
 
@@ -1764,24 +1798,22 @@ static int qup_i2c_suspend(struct device *device)
 	if (!pm_runtime_enabled(device) || !pm_runtime_suspended(device)) {
 		dev_dbg(device, "system suspend");
 		i2c_qup_pm_suspend_runtime(device);
-		/*
-		 * set the device's runtime PM status to 'suspended'
-		 */
-		pm_runtime_disable(device);
-		pm_runtime_set_suspended(device);
-		pm_runtime_enable(device);
 	}
 	return 0;
 }
 
 static int qup_i2c_resume(struct device *device)
 {
-	/*
-	 * Rely on runtime-PM to call resume in case it is enabled
-	 * Even if it's not enabled, rely on 1st client transaction to do
-	 * clock ON and gpio configuration
-	 */
-	dev_dbg(device, "system resume");
+	int ret = 0;
+	if (!pm_runtime_enabled(device) || !pm_runtime_suspended(device)) {
+		dev_dbg(device, "system resume");
+		ret = i2c_qup_pm_resume_runtime(device);
+		if (!ret) {
+			pm_runtime_mark_last_busy(device);
+			pm_request_autosuspend(device);
+		}
+		return ret;
+	}
 	return 0;
 }
 #endif /* CONFIG_PM */

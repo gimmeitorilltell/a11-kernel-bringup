@@ -32,6 +32,10 @@
 #include <mach/ramdump.h>
 #include <mach/msm_smem.h>
 #include <mach/msm_bus_board.h>
+#if defined(CONFIG_HTC_FEATURES_SSR)
+#include <mach/devices_dtb.h>
+#include <mach/devices_cmdline.h>
+#endif
 
 #include "peripheral-loader.h"
 #include "scm-pas.h"
@@ -85,6 +89,7 @@ struct pronto_data {
 	bool crash;
 	struct delayed_work cancel_vote_work;
 	struct ramdump_device *ramdump_dev;
+	struct work_struct wcnss_wdog_bite_work;
 };
 
 static int pil_pronto_make_proxy_vote(struct pil_desc *pil)
@@ -276,7 +281,11 @@ static void pronto_stop(const struct subsys_desc *desc)
 	pil_shutdown(&drv->desc);
 }
 
+#if defined(CONFIG_HTC_DEBUG_SSR)
+static void log_wcnss_sfr(struct subsys_device *dev)
+#else
 static void log_wcnss_sfr(void)
+#endif
 {
 	char *smem_reset_reason;
 	unsigned smem_reset_size;
@@ -293,6 +302,9 @@ static void log_wcnss_sfr(void)
 	} else {
 		pr_err("wcnss subsystem failure reason: %.81s\n",
 				smem_reset_reason);
+#if defined(CONFIG_HTC_DEBUG_SSR)
+		subsys_set_restart_reason(dev, smem_reset_reason);
+#endif
 		memset(smem_reset_reason, 0, smem_reset_size);
 		wmb();
 	}
@@ -300,7 +312,11 @@ static void log_wcnss_sfr(void)
 
 static void restart_wcnss(struct pronto_data *drv)
 {
+#if defined(CONFIG_HTC_DEBUG_SSR)
+	log_wcnss_sfr(drv->subsys);
+#else
 	log_wcnss_sfr();
+#endif
 	subsystem_restart_dev(drv->subsys);
 }
 
@@ -309,6 +325,7 @@ static irqreturn_t wcnss_err_fatal_intr_handler(int irq, void *dev_id)
 	struct pronto_data *drv = subsys_to_drv(dev_id);
 
 	pr_err("Fatal error on the wcnss.\n");
+    subsys_set_crash_status(drv->subsys, true);
 
 	drv->crash = true;
 	if (drv->restart_inprogress) {
@@ -320,6 +337,16 @@ static irqreturn_t wcnss_err_fatal_intr_handler(int irq, void *dev_id)
 	restart_wcnss(drv);
 
 	return IRQ_HANDLED;
+}
+
+static void wcnss_wdog_bite_work_hdlr(struct work_struct *wcnss_work)
+{
+	struct pronto_data *drv = container_of(wcnss_work, struct pronto_data,
+		wcnss_wdog_bite_work);
+
+	wcnss_log_debug_regs_on_bite();
+
+	restart_wcnss(drv);
 }
 
 static irqreturn_t wcnss_wdog_bite_irq_hdlr(int irq, void *dev_id)
@@ -334,10 +361,14 @@ static irqreturn_t wcnss_wdog_bite_irq_hdlr(int irq, void *dev_id)
 		pr_err("Ignoring wcnss bite irq, restart in progress\n");
 		return IRQ_HANDLED;
 	}
-	wcnss_log_debug_regs_on_bite();
 
+#if defined(CONFIG_HTC_DEBUG_SSR)
+	pr_err("Watchdog bite received from Pronto!\n");
+	subsys_set_restart_reason(drv->subsys, "Watchdog bite received from Pronto!");
+#endif
+	subsys_set_crash_status(drv->subsys, true);
 	drv->restart_inprogress = true;
-	restart_wcnss(drv);
+	schedule_work(&drv->wcnss_wdog_bite_work);
 
 	return IRQ_HANDLED;
 }
@@ -490,12 +521,37 @@ static int __devinit pil_pronto_probe(struct platform_device *pdev)
 	drv->subsys_desc.wdog_bite_handler = wcnss_wdog_bite_irq_hdlr;
 
 	INIT_DELAYED_WORK(&drv->cancel_vote_work, wcnss_post_bootup);
+	INIT_WORK(&drv->wcnss_wdog_bite_work, wcnss_wdog_bite_work_hdlr);
 
 	drv->subsys = subsys_register(&drv->subsys_desc);
 	if (IS_ERR(drv->subsys)) {
 		ret = PTR_ERR(drv->subsys);
 		goto err_subsys;
 	}
+
+#if defined(CONFIG_HTC_FEATURES_SSR)
+	/*WCNSS restart condition and ramdump rule would follow below
+	1. WCNSS restart default enable
+	- Independent on flag [6]
+	2. WCNSS restart default disable
+	- flag [6] 0    -> reboot
+	- flag [6] 1000 -> enable restart, no ramdump
+	3. Always disable WCNSS SSR if boot_mode != normal
+	*/
+#if defined(CONFIG_HTC_FEATURES_SSR_WCNSS_ENABLE)
+	subsys_set_restart_level(drv->subsys, RESET_SUBSYS_COUPLED);
+
+	/* Enable SSR ramdump if radio [8] = 8 */
+	if (get_radio_flag() & BIT(3))
+		subsys_set_enable_ramdump(drv->subsys, ENABLE_RAMDUMP);
+#else
+	if (get_kernel_flag() & KERNEL_FLAG_ENABLE_SSR_WCNSS)
+		subsys_set_restart_level(drv->subsys, RESET_SUBSYS_COUPLED);
+#endif
+
+	if (board_mfg_mode() != 0)
+		subsys_set_restart_level(drv->subsys, RESET_SOC);
+#endif
 
 	drv->ramdump_dev = create_ramdump_device("pronto", &pdev->dev);
 	if (!drv->ramdump_dev) {

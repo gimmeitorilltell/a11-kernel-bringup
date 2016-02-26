@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -18,6 +18,7 @@
 #include <linux/slab.h>
 #include <linux/kmemleak.h>
 #include <linux/highmem.h>
+#include <linux/msm_kgsl.h>
 
 #include "kgsl.h"
 #include "kgsl_sharedmem.h"
@@ -73,12 +74,12 @@ static struct kgsl_process_private *
 _get_priv_from_kobj(struct kobject *kobj)
 {
 	struct kgsl_process_private *private;
-	unsigned long name;
+	unsigned int name;
 
 	if (!kobj)
 		return NULL;
 
-	if (sscanf(kobj->name, "%ld", &name) != 1)
+	if (kstrtou32(kobj->name, 0, &name))
 		return NULL;
 
 	list_for_each_entry(private, &kgsl_driver.process_list, list) {
@@ -255,13 +256,13 @@ static int kgsl_drv_full_cache_threshold_store(struct device *dev,
 					 const char *buf, size_t count)
 {
 	int ret;
-	unsigned int thresh;
-	ret = sscanf(buf, "%d", &thresh);
-	if (ret != 1)
-		return count;
+	unsigned int thresh = 0;
+
+	ret = kgsl_sysfs_store(buf, count, &thresh);
+	if (ret != count)
+		return ret;
 
 	kgsl_driver.full_cache_threshold = thresh;
-
 	return count;
 }
 
@@ -271,6 +272,14 @@ static int kgsl_drv_full_cache_threshold_show(struct device *dev,
 {
 	return snprintf(buf, PAGE_SIZE, "%d\n",
 			kgsl_driver.full_cache_threshold);
+}
+
+static int kgsl_alloc_show(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n",
+			kgsl_get_alloc_size(true));
 }
 
 DEVICE_ATTR(vmalloc, 0444, kgsl_drv_memstat_show, NULL);
@@ -285,6 +294,7 @@ DEVICE_ATTR(histogram, 0444, kgsl_drv_histogram_show, NULL);
 DEVICE_ATTR(full_cache_threshold, 0644,
 		kgsl_drv_full_cache_threshold_show,
 		kgsl_drv_full_cache_threshold_store);
+DEVICE_ATTR(kgsl_alloc, 0444, kgsl_alloc_show, NULL);
 
 static const struct device_attribute *drv_attr_list[] = {
 	&dev_attr_vmalloc,
@@ -297,6 +307,7 @@ static const struct device_attribute *drv_attr_list[] = {
 	&dev_attr_mapped_max,
 	&dev_attr_histogram,
 	&dev_attr_full_cache_threshold,
+	&dev_attr_kgsl_alloc,
 	NULL
 };
 
@@ -395,9 +406,10 @@ static int kgsl_page_alloc_vmflags(struct kgsl_memdesc *memdesc)
 
 static void kgsl_page_alloc_free(struct kgsl_memdesc *memdesc)
 {
-	int i = 0;
+	int i = 0, j, size;
 	struct scatterlist *sg;
 	int sglen = memdesc->sglen;
+	struct kgsl_process_private *priv = memdesc->private;
 
 	kgsl_driver.stats.page_alloc -= memdesc->size;
 
@@ -406,8 +418,17 @@ static void kgsl_page_alloc_free(struct kgsl_memdesc *memdesc)
 		kgsl_driver.stats.vmalloc -= memdesc->size;
 	}
 	if (memdesc->sg)
-		for_each_sg(memdesc->sg, sg, sglen, i)
+		for_each_sg(memdesc->sg, sg, sglen, i) {
+			if (sg->length == 0)
+				break;
+			size = 1 << get_order(sg->length);
+			for (j = 0; j < size; j++)
+				ClearPageKgsl(nth_page(sg_page(sg), j));
 			__free_pages(sg_page(sg), get_order(sg->length));
+		}
+
+	if (priv)
+		kgsl_process_sub_stats(priv, KGSL_MEM_ENTRY_PAGE_ALLOC, memdesc->size);
 }
 
 static int kgsl_contiguous_vmflags(struct kgsl_memdesc *memdesc)
@@ -669,8 +690,10 @@ _kgsl_sharedmem_page_alloc(struct kgsl_memdesc *memdesc,
 			goto done;
 		}
 
-		for (j = 0; j < page_size >> PAGE_SHIFT; j++)
+		for (j = 0; j < page_size >> PAGE_SHIFT; j++) {
 			pages[pcount++] = nth_page(page, j);
+			SetPageKgsl(nth_page(page, j));
+		}
 
 		sg_set_page(&memdesc->sg[sglen++], page, page_size, 0);
 		len -= page_size;
@@ -769,11 +792,18 @@ kgsl_sharedmem_page_alloc_user(struct kgsl_memdesc *memdesc,
 			    struct kgsl_pagetable *pagetable,
 			    size_t size)
 {
+	int ret = 0;
+	struct kgsl_process_private *priv = memdesc->private;
+
 	size = PAGE_ALIGN(size);
 	if (size == 0)
 		return -EINVAL;
 
-	return _kgsl_sharedmem_page_alloc(memdesc, pagetable, size);
+	ret = _kgsl_sharedmem_page_alloc(memdesc, pagetable, size);
+
+	if (!ret && priv)
+		kgsl_process_add_stats(priv, KGSL_MEM_ENTRY_PAGE_ALLOC, size);
+	return ret;
 }
 EXPORT_SYMBOL(kgsl_sharedmem_page_alloc_user);
 

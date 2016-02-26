@@ -121,6 +121,7 @@ struct msm_mdp_interface {
 	u32 (*fb_stride)(u32 fb_index, u32 xres, int bpp);
 	struct msm_sync_pt_data *(*get_sync_fnc)(struct msm_fb_data_type *mfd,
 				const struct mdp_buf_sync *buf_sync);
+	void (*display_on)(struct msm_fb_data_type *mfd);
 	void *private1;
 };
 
@@ -162,6 +163,7 @@ struct msm_fb_data_type {
 
 	u32 dst_format;
 	int panel_power_on;
+	int request_display_on;
 	struct disp_info_type_suspend suspend;
 
 	struct ion_handle *ihdl;
@@ -204,9 +206,11 @@ struct msm_fb_data_type {
 	struct msm_fb_backup_type msm_fb_backup;
 	struct completion power_set_comp;
 	u32 is_power_setting;
+	u32 is_active;
 
 	u32 dcm_state;
 	struct list_head proc_list;
+	int pan_pid;
 };
 
 static inline void mdss_fb_update_notify_update(struct msm_fb_data_type *mfd)
@@ -235,4 +239,5 @@ void mdss_fb_wait_for_fence(struct msm_sync_pt_data *sync_pt_data);
 void mdss_fb_signal_timeline(struct msm_sync_pt_data *sync_pt_data);
 int mdss_fb_register_mdp_instance(struct msm_mdp_interface *mdp);
 int mdss_fb_dcm(struct msm_fb_data_type *mfd, int req_state);
+#define DEFAULT_BRIGHTNESS 143
 #endif /* MDSS_FB_H */

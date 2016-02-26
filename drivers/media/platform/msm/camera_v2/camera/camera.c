@@ -528,6 +528,7 @@ static int camera_v4l2_open(struct file *filep)
 	struct v4l2_event event;
 	struct msm_video_device *pvdev = video_drvdata(filep);
 	BUG_ON(!pvdev);
+	pr_info("%s: E\n", __func__); /* HTC_sungfeng */
 
 	rc = camera_v4l2_fh_open(filep);
 	if (rc < 0)
@@ -566,6 +567,8 @@ static int camera_v4l2_open(struct file *filep)
 
 	atomic_add(1, &pvdev->opened);
 	atomic_add(1, &pvdev->stream_cnt);
+
+	pr_info("%s: X, opened %d\n", __func__, atomic_read(&pvdev->opened)); /* HTC_sungfeng */
 	return rc;
 
 post_fail:
@@ -603,6 +606,7 @@ static int camera_v4l2_close(struct file *filep)
 	struct msm_video_device *pvdev = video_drvdata(filep);
 	struct camera_v4l2_private *sp = fh_to_private(filep->private_data);
 	BUG_ON(!pvdev);
+	pr_info("%s: E\n", __func__); /* HTC_sungfeng */
 
 	atomic_sub_return(1, &pvdev->opened);
 
@@ -641,6 +645,7 @@ static int camera_v4l2_close(struct file *filep)
 	camera_v4l2_vb2_q_release(filep);
 	camera_v4l2_fh_release(filep);
 
+	pr_info("%s: X, opened %d\n", __func__, atomic_read(&pvdev->opened)); /* HTC_sungfeng */
 	return rc;
 }
 

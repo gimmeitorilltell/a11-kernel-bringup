@@ -943,6 +943,11 @@ int udp_sendmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 			goto out;
 		}
 
+#ifdef CONFIG_HTC_NETWORK_MODIFY
+	if (IS_ERR(rt) || (!rt))
+		printk(KERN_ERR "[NET] rt is NULL in %s!\n", __func__);
+#endif
+
 		err = -EACCES;
 		if ((rt->rt_flags & RTCF_BROADCAST) &&
 		    !sock_flag(sk, SOCK_BROADCAST))
@@ -1518,6 +1523,12 @@ static void flush_stack(struct sock **stack, unsigned int count,
 		if (skb1 && udp_queue_rcv_skb(sk, skb1) <= 0)
 			skb1 = NULL;
 	}
+
+#ifdef CONFIG_HTC_NETWORK_MODIFY
+		if (IS_ERR(skb1) )
+			printk(KERN_ERR "[NET] skb1 is NULL in %s!\n", __func__);
+#endif
+
 	if (unlikely(skb1))
 		kfree_skb(skb1);
 }

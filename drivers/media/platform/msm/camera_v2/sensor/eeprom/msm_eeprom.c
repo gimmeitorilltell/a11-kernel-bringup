@@ -389,7 +389,7 @@ static struct msm_cam_clk_info cam_8960_clk_info[] = {
 };
 
 static struct msm_cam_clk_info cam_8974_clk_info[] = {
-	[SENSOR_CAM_MCLK] = {"cam_src_clk", 19200000},
+	[SENSOR_CAM_MCLK] = {"cam_src_clk", 24000000},
 	[SENSOR_CAM_CLK] = {"cam_clk", 0},
 };
 
@@ -434,13 +434,14 @@ int32_t msm_eeprom_i2c_probe(struct i2c_client *client,
 		struct msm_eeprom_board_info), GFP_KERNEL);
 	if (!e_ctrl->eboard_info) {
 		pr_err("%s:%d board info NULL\n", __func__, __LINE__);
+		kfree(e_ctrl);
 		return -EINVAL;
 	}
 
 	rc = of_property_read_u32(of_node, "qcom,slave-addr", &temp);
 	if (rc < 0) {
 		pr_err("%s failed rc %d\n", __func__, rc);
-		return rc;
+		goto board_free;
 	}
 
 	power_info = &e_ctrl->eboard_info->power_info;
@@ -522,6 +523,7 @@ memdata_free:
 	kfree(e_ctrl->eboard_info->eeprom_map);
 board_free:
 	kfree(e_ctrl->eboard_info);
+	kfree(e_ctrl);
 probe_failure:
 	pr_err("%s failed! rc = %d\n", __func__, rc);
 	return rc;
@@ -636,7 +638,7 @@ static int msm_eeprom_spi_setup(struct spi_device *spi)
 	CDBG("cell-index %d, rc %d\n", e_ctrl->subdev_id, rc);
 	if (rc) {
 		pr_err("failed rc %d\n", rc);
-		return rc;
+		goto spi_free;
 	}
 
 	e_ctrl->eeprom_device_type = MSM_CAMERA_SPI_DEVICE;
@@ -734,6 +736,7 @@ board_free:
 	kfree(e_ctrl->eboard_info);
 spi_free:
 	kfree(spi_client);
+	kfree(e_ctrl);
 	return rc;
 }
 

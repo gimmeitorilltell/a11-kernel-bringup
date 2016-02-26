@@ -740,7 +740,7 @@ static int __init snd_usb_audio_init(void)
 		return -ENOMEM;
 	}
 
-	usbaudiosdev->name = "usb_audio";
+	usbaudiosdev->name = "usb_audio_class";
 
 	err = switch_dev_register(usbaudiosdev);
 	if (err)

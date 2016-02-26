@@ -553,6 +553,7 @@ static int get_impedance_index(u32 imped)
 		goto ret;
 	}
 	for (i = 0; i < ARRAY_SIZE(imped_index); i++) {
+		if (i == (ARRAY_SIZE(imped_index)-1)) break;
 		if (imped >= imped_index[i].imped_val &&
 			imped < imped_index[i + 1].imped_val)
 			break;

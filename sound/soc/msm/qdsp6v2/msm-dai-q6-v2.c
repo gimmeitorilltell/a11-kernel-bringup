@@ -1525,7 +1525,10 @@ static int msm_dai_q6_mi2s_hw_params(struct snd_pcm_substream *substream,
 	struct msm_dai_q6_dai_data *dai_data = &mi2s_dai_config->mi2s_dai_data;
 	struct afe_param_id_i2s_cfg *i2s = &dai_data->port_config.i2s;
 
-
+//htc audio ++
+	u16 port_id = 0;
+	msm_mi2s_get_port_id(dai->id, substream->stream, &port_id);
+//htc audio --
 	dai_data->channels = params_channels(params);
 	switch (dai_data->channels) {
 	case 8:
@@ -1584,7 +1587,7 @@ static int msm_dai_q6_mi2s_hw_params(struct snd_pcm_substream *substream,
 		goto error_invalid_data;
 	}
 	dai_data->rate = params_rate(params);
-
+//HTC_AUD ++
 	switch (params_format(params)) {
 	case SNDRV_PCM_FORMAT_S16_LE:
 	case SNDRV_PCM_FORMAT_SPECIAL:
@@ -1598,7 +1601,10 @@ static int msm_dai_q6_mi2s_hw_params(struct snd_pcm_substream *substream,
 	default:
 		return -EINVAL;
 	}
-
+	pr_info("%s: port id 0x%x bit_width %d\n",__func__,port_id,dai_data->bitwidth);
+//HTC_AUD --
+	pr_info("%s: port id 0x%x bit_width %d\n",__func__,port_id,dai_data->bitwidth);
+//HTC_AUD --
 	dai_data->port_config.i2s.i2s_cfg_minor_version =
 			AFE_API_VERSION_I2S_CONFIG;
 	dai_data->port_config.i2s.sample_rate = dai_data->rate;
@@ -1711,7 +1717,7 @@ static struct snd_soc_dai_driver msm_dai_q6_mi2s_dai = {
 	.playback = {
 		.rates = SNDRV_PCM_RATE_48000 | SNDRV_PCM_RATE_8000 |
 		SNDRV_PCM_RATE_16000,
-		.formats = SNDRV_PCM_FMTBIT_S16_LE,
+		.formats = SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S24_LE,
 		.rate_min =     8000,
 		.rate_max =     48000,
 	},

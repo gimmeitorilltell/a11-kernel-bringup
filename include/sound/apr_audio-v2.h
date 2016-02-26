@@ -3675,6 +3675,7 @@ struct asm_session_cmd_run_v2 {
 
 } __packed;
 
+#define ASM_SESSION_CMD_SUSPEND 0x00010DEC
 #define ASM_SESSION_CMD_PAUSE 0x00010BD3
 #define ASM_SESSION_CMD_SUSPEND 0x00010DEC
 #define ASM_SESSION_CMD_GET_SESSIONTIME_V3 0x00010D9D
@@ -7175,4 +7176,15 @@ struct afe_svc_cmd_set_clip_bank_selection {
 #define US_RAW_SYNC_FORMAT      0x0001272F
 #define US_GES_SYNC_FORMAT      0x00012730
 
+//HTC_AUD ++
+#define HTC_COPP_TOPOLOGY				0x10000001
+#define HTC_POPP_TOPOLOGY				0x10000002
+
+struct asm_params {
+	struct apr_hdr	hdr;
+	struct asm_stream_cmd_set_pp_params_v2 param;
+	struct asm_stream_param_data_v2 data;
+} __packed;
+
+//HTC_AUD --
 #endif /*_APR_AUDIO_V2_H_ */

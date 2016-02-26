@@ -42,7 +42,7 @@ static inline u32 mdss_mdp_pipe_read(struct mdss_mdp_pipe *pipe, u32 reg)
 {
 	return readl_relaxed(pipe->base + reg);
 }
-
+static void mdss_mdp_smp_mmb_free(unsigned long *smp, bool write);
 static u32 mdss_mdp_smp_mmb_reserve(struct mdss_mdp_pipe_smp_map *smp_map,
 	size_t n)
 {
@@ -55,8 +55,27 @@ static u32 mdss_mdp_smp_mmb_reserve(struct mdss_mdp_pipe_smp_map *smp_map,
 	else
 		n -= fixed_cnt;
 
-	/* reserve more blocks if needed, but can't free mmb at this point */
-	for (i = bitmap_weight(smp_map->allocated, SMP_MB_CNT); i < n; i++) {
+	i = bitmap_weight(smp_map->allocated, SMP_MB_CNT);
+
+	/*
+	 * SMP programming is not double buffered. Fail the request,
+	 * that calls for change in smp configuration (addition/removal
+	 * of smp blocks), so that fallback solution happens.
+	 */
+	if (i != 0 && n != i) {
+		pr_debug("Can't change mmb config, num_blks: %d alloc: %d\n",
+			n, i);
+		return 0;
+	}
+
+	/*
+	 * Clear previous SMP reservations and reserve according to the
+	 * latest configuration
+	 */
+	mdss_mdp_smp_mmb_free(smp_map->reserved, false);
+
+	/* Reserve mmb blocks*/
+	for (; i < n; i++) {
 		if (bitmap_full(mdata->mmb_alloc_map, SMP_MB_CNT))
 			break;
 
@@ -166,7 +185,7 @@ int mdss_mdp_smp_reserve(struct mdss_mdp_pipe *pipe)
 	struct mdss_mdp_plane_sizes ps;
 	int i;
 	int rc = 0, rot_mode = 0;
-	u32 nlines, format;
+	u32 nlines;
 	u16 width;
 
 	width = pipe->src.w >> pipe->horz_deci;
@@ -179,34 +198,26 @@ int mdss_mdp_smp_reserve(struct mdss_mdp_pipe *pipe)
 		pr_debug("BWC SMP strides ystride0=%x ystride1=%x\n",
 			ps.ystride[0], ps.ystride[1]);
 	} else {
-		format = pipe->src_fmt->format;
-		/*
-		 * when decimation block is present, all chroma planes
-		 * are fetched on a single SMP plane for chroma pixels
-		 */
-		if (mdata->has_decimation) {
-			switch (pipe->src_fmt->chroma_sample) {
-			case MDSS_MDP_CHROMA_H2V1:
-				format = MDP_Y_CRCB_H2V1;
-				break;
-			case MDSS_MDP_CHROMA_420:
-				format = MDP_Y_CBCR_H2V2;
-				break;
-			default:
-				break;
-			}
-		}
-		rc = mdss_mdp_get_plane_sizes(format, width, pipe->src.h,
-			&ps, 0);
+		rc = mdss_mdp_get_plane_sizes(pipe->src_fmt->format,
+			width, pipe->src.h, &ps, 0);
 		if (rc)
 			return rc;
 
 		if (pipe->mixer && pipe->mixer->rotator_mode) {
 			rot_mode = 1;
-		} else if (ps.num_planes == 1) {
+		} else if ((ps.num_planes == 1) && pipe->mixer) {
 			ps.ystride[0] = MAX_BPP *
 				max(pipe->mixer->width, width);
 		} else if (mdata->has_decimation) {
+			/*
+			 * when decimation block is used, all chroma planes
+			 * are fetched on a single SMP plane for chroma pixels
+			 */
+			if (ps.num_planes == 3) {
+				ps.num_planes = 2;
+				ps.ystride[1] += ps.ystride[2];
+			}
+
 			/*
 			 * To avoid quailty loss, MDP does one less decimation
 			 * on chroma components if they are subsampled.
@@ -224,6 +235,15 @@ int mdss_mdp_smp_reserve(struct mdss_mdp_pipe *pipe)
 	nlines = pipe->bwc_mode ? 1 : 2;
 
 	mutex_lock(&mdss_mdp_smp_lock);
+	for (i = (MAX_PLANES - 1); i >= ps.num_planes; i--) {
+		if (bitmap_weight(pipe->smp_map[i].allocated, SMP_MB_CNT)) {
+			pr_debug("Extra mmb identified for pnum=%d plane=%d\n",
+				pipe->num, i);
+			mutex_unlock(&mdss_mdp_smp_lock);
+			return -EAGAIN;
+		}
+	}
+
 	for (i = 0; i < ps.num_planes; i++) {
 		if (rot_mode) {
 			num_blks = 1;
@@ -353,8 +373,9 @@ int mdss_mdp_smp_handoff(struct mdss_data_type *mdata)
 			 * such cases, we do not need to do anything
 			 * here.
 			 */
-			pr_debug("smp mmb %d already assigned to pipe %d (client_id %d)"
-				, i, pipe->num, client_id);
+			if (pipe)
+				pr_debug("smp mmb %d already assigned to pipe %d (client_id %d)"
+					, i, pipe->num, client_id);
 			continue;
 		}
 
@@ -589,8 +610,6 @@ static int mdss_mdp_pipe_free(struct mdss_mdp_pipe *pipe)
 	mdss_mdp_smp_free(pipe);
 	pipe->flags = 0;
 	pipe->bwc_mode = 0;
-	memset(&pipe->scale, 0, sizeof(struct mdp_scale_data));
-
 	mdss_mdp_clk_ctrl(MDP_BLOCK_POWER_OFF, false);
 
 	return 0;
@@ -663,10 +682,12 @@ int mdss_mdp_pipe_handoff(struct mdss_mdp_pipe *pipe)
 	}
 	pipe->src_fmt = mdss_mdp_get_format_params(src_fmt);
 
-	pr_debug("Pipe settings: src.h=%d src.w=%d dst.h=%d dst.w=%d bpp=%d\n"
-		, pipe->src.h, pipe->src.w, pipe->dst.h, pipe->dst.w,
-		pipe->src_fmt->bpp);
-
+	if (pipe->src_fmt)
+		pr_debug("Pipe settings: src.h=%d src.w=%d dst.h=%d dst.w=%d bpp=%d\n"
+			, pipe->src.h, pipe->src.w, pipe->dst.h, pipe->dst.w,
+			pipe->src_fmt->bpp);
+	else
+		pr_err("pipe->src_fmt was NULL\n");
 	pipe->is_handed_off = true;
 	atomic_inc(&pipe->ref_cnt);
 
@@ -751,11 +772,7 @@ static int mdss_mdp_image_setup(struct mdss_mdp_pipe *pipe,
 	ystride1 =  (pipe->src_planes.ystride[2]) |
 			(pipe->src_planes.ystride[3] << 16);
 
-	/*
-	 * Software overfetch is used when scalar pixel extension is
-	 * not enabled
-	 */
-	if (pipe->overfetch_disable && !pipe->scale.enable_pxl_ext) {
+	if (pipe->overfetch_disable) {
 		if (pipe->overfetch_disable & OVERFETCH_DISABLE_BOTTOM) {
 			height = pipe->src.h;
 			if (!(pipe->overfetch_disable & OVERFETCH_DISABLE_TOP))
@@ -841,9 +858,6 @@ static int mdss_mdp_format_setup(struct mdss_mdp_pipe *pipe)
 
 	mdss_mdp_pipe_sspp_setup(pipe, &opmode);
 
-	if (pipe->scale.enable_pxl_ext)
-		opmode |= (1 << 31);
-
 	mdss_mdp_pipe_write(pipe, MDSS_MDP_REG_SSPP_SRC_FORMAT, src_format);
 	mdss_mdp_pipe_write(pipe, MDSS_MDP_REG_SSPP_SRC_UNPACK_PATTERN, unpack);
 	mdss_mdp_pipe_write(pipe, MDSS_MDP_REG_SSPP_SRC_OP_MODE, opmode);
@@ -875,21 +889,20 @@ int mdss_mdp_pipe_addr_setup(struct mdss_data_type *mdata,
 }
 
 static int mdss_mdp_src_addr_setup(struct mdss_mdp_pipe *pipe,
-				   struct mdss_mdp_data *src_data)
+				   struct mdss_mdp_data *data)
 {
 	struct mdss_data_type *mdata = mdss_mdp_get_mdata();
-	struct mdss_mdp_data data = *src_data;
 	int ret = 0;
 
 	pr_debug("pnum=%d\n", pipe->num);
 
-	data.bwc_enabled = pipe->bwc_mode;
+	data->bwc_enabled = pipe->bwc_mode;
 
-	ret = mdss_mdp_data_check(&data, &pipe->src_planes);
+	ret = mdss_mdp_data_check(data, &pipe->src_planes);
 	if (ret)
 		return ret;
 
-	if (pipe->overfetch_disable && !pipe->scale.enable_pxl_ext) {
+	if (pipe->overfetch_disable) {
 		u32 x = 0, y = 0;
 
 		if (pipe->overfetch_disable & OVERFETCH_DISABLE_LEFT)
@@ -897,7 +910,7 @@ static int mdss_mdp_src_addr_setup(struct mdss_mdp_pipe *pipe,
 		if (pipe->overfetch_disable & OVERFETCH_DISABLE_TOP)
 			y = pipe->src.y;
 
-		mdss_mdp_data_calc_offset(&data, x, y,
+		mdss_mdp_data_calc_offset(data, x, y,
 			&pipe->src_planes, pipe->src_fmt);
 	}
 
@@ -905,12 +918,12 @@ static int mdss_mdp_src_addr_setup(struct mdss_mdp_pipe *pipe,
 	if (mdata->mdp_rev < MDSS_MDP_HW_REV_102 &&
 			(pipe->src_fmt->fetch_planes == MDSS_MDP_PLANE_PLANAR)
 				&& (pipe->src_fmt->element[0] == C1_B_Cb))
-		swap(data.p[1].addr, data.p[2].addr);
+		swap(data->p[1].addr, data->p[2].addr);
 
-	mdss_mdp_pipe_write(pipe, MDSS_MDP_REG_SSPP_SRC0_ADDR, data.p[0].addr);
-	mdss_mdp_pipe_write(pipe, MDSS_MDP_REG_SSPP_SRC1_ADDR, data.p[1].addr);
-	mdss_mdp_pipe_write(pipe, MDSS_MDP_REG_SSPP_SRC2_ADDR, data.p[2].addr);
-	mdss_mdp_pipe_write(pipe, MDSS_MDP_REG_SSPP_SRC3_ADDR, data.p[3].addr);
+	mdss_mdp_pipe_write(pipe, MDSS_MDP_REG_SSPP_SRC0_ADDR, data->p[0].addr);
+	mdss_mdp_pipe_write(pipe, MDSS_MDP_REG_SSPP_SRC1_ADDR, data->p[1].addr);
+	mdss_mdp_pipe_write(pipe, MDSS_MDP_REG_SSPP_SRC2_ADDR, data->p[2].addr);
+	mdss_mdp_pipe_write(pipe, MDSS_MDP_REG_SSPP_SRC3_ADDR, data->p[3].addr);
 
 	return 0;
 }
@@ -932,8 +945,6 @@ static int mdss_mdp_pipe_solidfill_setup(struct mdss_mdp_pipe *pipe)
 	secure = (pipe->flags & MDP_SECURE_OVERLAY_SESSION ? 0xF : 0x0);
 
 	mdss_mdp_pipe_write(pipe, MDSS_MDP_REG_SSPP_SRC_FORMAT, format);
-	mdss_mdp_pipe_write(pipe, MDSS_MDP_REG_SSPP_SRC_CONSTANT_COLOR,
-		pipe->bg_color);
 	mdss_mdp_pipe_write(pipe, MDSS_MDP_REG_SSPP_SRC_ADDR_SW_STATUS, secure);
 
 	return 0;
@@ -943,9 +954,8 @@ int mdss_mdp_pipe_queue_data(struct mdss_mdp_pipe *pipe,
 			     struct mdss_mdp_data *src_data)
 {
 	int ret = 0;
+	u32 params_changed, opmode;
 	struct mdss_mdp_ctl *ctl;
-	u32 params_changed;
-	u32 opmode = 0;
 
 	if (!pipe) {
 		pr_err("pipe not setup properly for queue\n");
@@ -972,8 +982,7 @@ int mdss_mdp_pipe_queue_data(struct mdss_mdp_pipe *pipe,
 			 (pipe->mixer->type == MDSS_MDP_MIXER_TYPE_WRITEBACK)
 			 && (ctl->mdata->mixer_switched)) ||
 			 ctl->roi_changed;
-	if (src_data == NULL || !pipe->has_buf) {
-		pipe->params_changed = 0;
+	if (src_data == NULL) {
 		mdss_mdp_pipe_solidfill_setup(pipe);
 		goto update_nobuf;
 	}
@@ -1026,54 +1035,4 @@ done:
 int mdss_mdp_pipe_is_staged(struct mdss_mdp_pipe *pipe)
 {
 	return (pipe == pipe->mixer->stage_pipe[pipe->mixer_stage]);
-}
-
-static inline void __mdss_mdp_pipe_program_pixel_extn_helper(
-	struct mdss_mdp_pipe *pipe, u32 plane, u32 off)
-{
-	u32 src_h = pipe->src.h >> pipe->vert_deci;
-	u32 mask = 0xFF;
-
-	/*
-	 * CB CR plane required pxls need to be accounted
-	 * for chroma decimation.
-	 */
-	if (plane == 1)
-		src_h >>= pipe->chroma_sample_v;
-	writel_relaxed(((pipe->scale.right_ftch[plane] & mask) << 24)|
-		((pipe->scale.right_rpt[plane] & mask) << 16)|
-		((pipe->scale.left_ftch[plane] & mask) << 8)|
-		(pipe->scale.left_rpt[plane] & mask), pipe->base +
-			MDSS_MDP_REG_SSPP_SW_PIX_EXT_C0_LR + off);
-	writel_relaxed(((pipe->scale.btm_ftch[plane] & mask) << 24)|
-		((pipe->scale.btm_rpt[plane] & mask) << 16)|
-		((pipe->scale.top_ftch[plane] & mask) << 8)|
-		(pipe->scale.top_rpt[plane] & mask), pipe->base +
-			MDSS_MDP_REG_SSPP_SW_PIX_EXT_C0_TB + off);
-	mask = 0xFFFF;
-	writel_relaxed((((src_h + pipe->scale.num_ext_pxls_top[plane] +
-		pipe->scale.num_ext_pxls_btm[plane]) & mask) << 16) |
-		((pipe->scale.roi_w[plane] +
-		pipe->scale.num_ext_pxls_left[plane] +
-		pipe->scale.num_ext_pxls_right[plane]) & mask), pipe->base +
-			MDSS_MDP_REG_SSPP_SW_PIX_EXT_C0_REQ_PIXELS + off);
-}
-
-/**
- * mdss_mdp_pipe_program_pixel_extn - Program the source pipe's
- *				      sw pixel extension
- * @pipe:	Source pipe struct containing pixel extn values
- *
- * Function programs the pixel extn values calculated during
- * scale setup.
- */
-int mdss_mdp_pipe_program_pixel_extn(struct mdss_mdp_pipe *pipe)
-{
-	/* Y plane pixel extn */
-	__mdss_mdp_pipe_program_pixel_extn_helper(pipe, 0, 0);
-	/* CB CR plane pixel extn */
-	__mdss_mdp_pipe_program_pixel_extn_helper(pipe, 1, 16);
-	/* Alpha plane pixel extn */
-	__mdss_mdp_pipe_program_pixel_extn_helper(pipe, 3, 32);
-	return 0;
 }

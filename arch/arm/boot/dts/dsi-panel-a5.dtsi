@@ -1,0 +1,176 @@
+&mdss_mdp {
+		qcom,mdss_dsi_a5_jdi_novatek_35521_c3_720p_video {
+		compatible = "qcom,mdss-dsi-panel";
+		status = "disable";
+		qcom,cont-splash-enabled;
+		qcom,mdss-dsi-panel-name = "a5 720p JDI/NT35521 video mode dsi panel";
+		qcom,mdss-dsi-panel-controller = <&mdss_dsi0>;
+		qcom,mdss-dsi-panel-type = "dsi_video_mode";
+		qcom,mdss-dsi-panel-destination = "display_1";
+		qcom,mdss-dsi-panel-framerate = <60>;
+		qcom,mdss-dsi-virtual-channel-id = <0>;
+		qcom,mdss-dsi-stream = <0>;
+		qcom,mdss-dsi-panel-width = <720>;
+		qcom,mdss-dsi-panel-height = <1280>;
+		qcom,mdss-dsi-h-front-porch = <116>;
+		qcom,mdss-dsi-h-back-porch = <116>;
+		qcom,mdss-dsi-h-pulse-width = <2>;
+		qcom,mdss-dsi-h-sync-skew = <0>;
+		qcom,mdss-dsi-v-back-porch = <13>;
+		qcom,mdss-dsi-v-front-porch = <11>;
+		qcom,mdss-dsi-v-pulse-width = <2>;
+		qcom,mdss-dsi-h-left-border = <0>;
+		qcom,mdss-dsi-h-right-border = <0>;
+		qcom,mdss-dsi-v-top-border = <0>;
+		qcom,mdss-dsi-v-bottom-border = <0>;
+		qcom,mdss-dsi-bpp = <24>;
+		qcom,mdss-dsi-color-order = <0>;
+		qcom,mdss-dsi-underflow-color = <0xff>;
+		qcom,mdss-dsi-border-color = <0>;
+		qcom,mdss-dsi-on-command = [
+			15 01 00 00 00 00 02 BB 03 /* MIPI VIDEO mode */
+			05 01 00 00 8C 00 02 11 00 /* LCD Sleep out command */
+			15 01 00 00 00 00 02 53 2C /* Backlight control */
+			29 01 00 00 00 00 06 F0 55 AA 52 08 00 /* CABC PWM Setting */
+			15 01 00 00 00 00 02 d3 00 /* CABC PWM Setting */
+			29 01 00 00 00 00 03 d6 44 44 /* CABC PWM Setting */
+			29 01 00 00 00 00 0B E8 FF FE F8 EE D7 BA A8 82 68 66 /* CABC Moving Mode */
+			29 01 00 00 00 00 05 FF AA 55 A5 80 /* CABC Moving Mode */
+			15 01 00 00 00 00 02 6F 10 /* CABC Moving Mode */
+			15 01 00 00 00 00 02 F5 70 /* CABC Moving Mode */
+			29 01 00 00 00 00 0B E7 FF FF FA FA F8 EB DC D4 B5 B3 /* CABC Still Mode */
+			29 01 00 00 00 00 12 D1 00 05 10 17 22 26 29 29 29 26 23 17 12 06 02 01 00 /* Vivid Color */
+			29 01 00 00 00 00 11 CC 41 36 87 00 00 00 00 00 00 00 00 00 00 00 00 05 /* Vivid Color */
+			29 01 00 00 00 00 0D D7 30 30 30 28 00 00 00 00 00 00 00 00 /* Vivid Color */
+			29 01 00 00 00 00 0D D8 00 00 00 00 00 00 00 00 00 28 30 30 /* Vivid Color */
+			15 01 00 00 00 00 02 55 82 /* CABC control 01: CABC on*/
+			15 01 00 00 00 00 02 5E 22
+			15 01 00 00 00 00 02 35 00 /* Turn on TE */];
+		qcom,mdss-dsi-off-command = [
+			15 01 00 00 00 00 02 53 00 /* Backlight control */
+			15 01 00 00 00 00 02 55 00 /* CABC control 00: CABC off*/
+			05 01 00 00 14 00 02 28 00 /* display_off */
+			05 01 00 00 8C 00 02 10 00 /* Sleep in */];
+		qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+		qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
+		qcom,mdss-dsi-h-sync-pulse = <0>;
+		qcom,mdss-dsi-traffic-mode = <1>;
+		qcom,mdss-dsi-bllp-eof-power-mode;
+		qcom,mdss-dsi-lane-map = <0>;
+		qcom,mdss-dsi-bllp-power-mode;
+		qcom,mdss-dsi-lane-0-state;
+		qcom,mdss-dsi-lane-1-state;
+		qcom,mdss-dsi-lane-2-state;
+		qcom,mdss-dsi-panel-timings =  [37 27 20 01 3c 39 21
+					29 32 03 04 00];
+		qcom,mdss-dsi-t-clk-post = <0x1f>;
+		qcom,mdss-dsi-t-clk-pre = <0x39>;
+		qcom,mdss-dsi-bl-min-level = <1>;
+		qcom,mdss-dsi-bl-max-level = <255>;
+		qcom,mdss-dsi-dma-trigger = <0x04>;
+		qcom,mdss-dsi-mdp-trigger = <0x0>;
+		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+
+		qcom,display-on-cmds = [05 01 00 00 00 00 02 29 00 /* LCD Display on */];
+		htc,cabc-off-cmds = [39 01 00 00 00 00 02 55 00];
+		htc,cabc-ui-cmds = [39 01 00 00 00 00 02 55 82];
+		htc,cabc-video-cmds = [39 01 00 00 00 00 02 55 83];
+		qcom,mdss-dsi-default-command-state = "dsi_hs_mode";
+		qcom,mdss-pan-physical-width-dimension = <53>;
+		qcom,mdss-pan-physical-height-dimension = <94>;
+		qcom,mdss-shrink-pwm = <7 61 255>;
+		qcom,mdss-shrink-pwm-power-hack = <7 61 255>;
+		qcom,mdss-dsi-lp11-init;
+		htc,mdss-camera-blk = <194>;
+		htc,mdss-camera-blk-power-hack = <169>;
+		htc,mdp-pcc-r = <0x8000>;
+		htc,mdp-pcc-g = <0x7B8D>;
+		htc,mdp-pcc-b = <0x7BAB>;
+		htc,panel-id=<1>;
+	};
+	qcom,mdss_dsi_a5_sharp_hx_720p_cmd {
+		compatible = "qcom,mdss-dsi-panel";
+		status = "disabled";
+		qcom,mdss-dsi-panel-name = "a5 sharp himax 720p command mode dsi panel";
+		qcom,mdss-dsi-panel-controller = <&mdss_dsi0>;
+		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
+		qcom,mdss-dsi-te-pin-select = <1>;
+		qcom,mdss-dsi-te-v-sync-rd-ptr-irq-line = <0x2c>;
+		qcom,mdss-dsi-te-dcs-command = <1>;
+		qcom,mdss-dsi-te-check-enable;
+		qcom,mdss-dsi-te-using-te-pin;
+
+		qcom,mdss-dsi-panel-destination = "display_1";
+		qcom,mdss-dsi-panel-framerate = <60>;
+		qcom,mdss-dsi-virtual-channel-id = <0>;
+		qcom,mdss-dsi-stream = <0>;
+		qcom,mdss-dsi-panel-width = <720>;
+		qcom,mdss-dsi-panel-height = <1280>;
+		qcom,mdss-dsi-h-front-porch = <55>;
+		qcom,mdss-dsi-h-back-porch = <29>;
+		qcom,mdss-dsi-h-pulse-width = <16>;
+		qcom,mdss-dsi-h-sync-skew = <0>;
+		qcom,mdss-dsi-v-back-porch = <1>;
+		qcom,mdss-dsi-v-front-porch = <2>;
+		qcom,mdss-dsi-v-pulse-width = <1>;
+		qcom,mdss-dsi-h-left-border = <0>;
+		qcom,mdss-dsi-h-right-border = <0>;
+		qcom,mdss-dsi-v-top-border = <0>;
+		qcom,mdss-dsi-v-bottom-border = <0>;
+		qcom,mdss-dsi-bpp = <24>;
+		qcom,mdss-dsi-color-order = <0>;
+		qcom,mdss-dsi-underflow-color = <0xff>;
+		qcom,mdss-dsi-border-color = <0>;
+		qcom,mdss-dsi-on-command = [
+					/* exit sleep */
+					05 01 00 00 78 00 02 11 00
+
+					39 01 00 00 01 00 04 b9 ff 83 92
+					15 01 00 00 01 00 02 d4 00
+					39 01 00 00 01 00 08 ba 12 83 00 d6 c6 00 0a
+					39 01 00 00 01 00 03 c0 01 94
+					39 01 00 00 01 00 05 c6 35 00 00 04
+					39 01 00 00 01 00 04 d5 00 00 02
+					39 01 00 00 01 00 04 bf 05 60 02
+
+					39 01 00 00 01 00 02 c2 08
+					/*15 01 00 00 01 00 02 36 03*/
+					15 01 00 00 05 00 02 e3 01
+					39 01 00 00 01 00 13 e5 00 04 0b 05 05 00 80 20 80 10 00 07 07 07 07 07 80 0a
+					15 01 00 00 01 00 02 35 00
+
+					15 01 00 00 01 00 02 53 24
+					15 01 00 00 05 00 02 55 03
+					39 01 00 00 01 00 0a ca 2d 27 26 25 25 25 21 20 20
+					39 01 00 00 01 00 07 c9 1f 00 1e 3f 00 80];
+		qcom,mdss-dsi-off-command = [05 01 00 00 01 00 02 28 00
+					05 01 00 00 82 00 02 10 00];
+		qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+		qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
+		qcom,mdss-dsi-h-sync-pulse = <1>;
+		qcom,mdss-dsi-traffic-mode = <1>;
+		qcom,mdss-dsi-bllp-eof-power-mode;
+		qcom,mdss-dsi-lane-map = <0>;
+		qcom,mdss-dsi-bllp-power-mode;
+		qcom,mdss-dsi-lane-0-state;
+		qcom,mdss-dsi-lane-1-state;
+		qcom,mdss-dsi-lane-2-state;
+		qcom,mdss-dsi-panel-timings =  [37 27 20 01 3c 39 21
+					29 32 03 04 00];
+		qcom,mdss-dsi-t-clk-post = <0x1f>;
+		qcom,mdss-dsi-t-clk-pre = <0x39>;
+		qcom,mdss-dsi-bl-min-level = <1>;
+		qcom,mdss-dsi-bl-max-level = <255>;
+		qcom,mdss-dsi-dma-trigger = <0x04>;
+		qcom,mdss-dsi-mdp-trigger = <0x0>;
+		qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+
+		qcom,display-on-cmds = [05 01 00 00 5a 00 02 29 00];
+		qcom,mdss-dsi-default-command-state = "dsi_hs_mode";
+		qcom,mdss-pan-physical-width-dimension = <53>;
+		qcom,mdss-pan-physical-height-dimension = <94>;
+		qcom,mdss-shrink-pwm = <12 79 255>;
+		htc,mdss-camera-blk = <185>;
+		htc,panel-id=<0>;
+	};
+};

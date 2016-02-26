@@ -1306,6 +1306,7 @@ static int __devinit qpnp_iadc_probe(struct spmi_device *spmi)
 		iadc->external_rsense = true;
 	}
 
+	INIT_WORK(&iadc->trigger_completion_work, qpnp_iadc_trigger_completion);
 	iadc->iadc_poll_eoc = of_property_read_bool(node,
 						"qcom,iadc-poll-eoc");
 	if (!iadc->iadc_poll_eoc) {
@@ -1332,7 +1333,7 @@ static int __devinit qpnp_iadc_probe(struct spmi_device *spmi)
 		goto fail;
 	}
 
-	INIT_WORK(&iadc->trigger_completion_work, qpnp_iadc_trigger_completion);
+
 	INIT_DELAYED_WORK(&iadc->iadc_work, qpnp_iadc_work);
 	rc = qpnp_iadc_comp_info(iadc);
 	if (rc) {

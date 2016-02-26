@@ -695,6 +695,7 @@ struct dwc3_scratchpad_array {
  * @hwparams: copy of hwparams registers
  * @root: debugfs root folder pointer
  * @tx_fifo_size: Available RAM size for TX fifo allocation
+ * @err_evt_seen: previous event in queue was erratic error
  */
 struct dwc3 {
 	struct usb_ctrlrequest	*ctrl_req;
@@ -780,8 +781,10 @@ struct dwc3 {
 	/* Indicate if software connect was issued by the usb_gadget_driver */
 	bool			softconnect;
 	void (*notify_event) (struct dwc3 *, unsigned);
+	struct delayed_work chg_stop;
 	int			tx_fifo_size;
 	bool			tx_fifo_reduced;
+	bool		err_evt_seen;
 };
 
 /* -------------------------------------------------------------------------- */

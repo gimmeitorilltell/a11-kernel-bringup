@@ -1557,7 +1557,7 @@ wcd9xxx_find_plug_type(struct wcd9xxx_mbhc *mbhc,
 			continue;
 		}
 
-		if ((i > 0) && (d->_type != dprev->_type)) {
+		if ((i > 0) && dprev && (d->_type != dprev->_type)) {
 			pr_debug("%s: Invalid, inconsistent types\n", __func__);
 			type = PLUG_TYPE_INVALID;
 			goto exit;
@@ -3895,6 +3895,9 @@ static void wcd9xxx_mbhc_fw_read(struct work_struct *work)
 
 	if (ret != 0) {
 		pr_err("%s: Cannot load MBHC firmware use default cal\n",
+		       __func__);
+	} else if (fw == NULL) {
+		pr_err("%s: fw is NULL\n",
 		       __func__);
 	} else if (wcd9xxx_mbhc_fw_validate(fw) == false) {
 		pr_err("%s: Invalid MBHC cal data size use default cal\n",

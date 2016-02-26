@@ -1,4 +1,4 @@
-/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -13,7 +13,11 @@
 #include <media/v4l2-subdev.h>
 #include "msm_isp_util.h"
 #include "msm_isp_axi_util.h"
-
+//HTC_START, for subcam no ack issue
+int g_subcam_SOF = 0;
+extern int g_subcam_vfe_intf;
+int g_subcam_no_ack = 0;
+//HTC_END
 #define SRC_TO_INTF(src) \
 	((src < RDI_INTF_0) ? VFE_PIX_0 : \
 	(VFE_RAW_0 + src - RDI_INTF_0))
@@ -211,7 +215,7 @@ static uint32_t msm_isp_axi_get_plane_size(
 				plane_cfg[plane_idx].output_width;
 		else
 			size = plane_cfg[plane_idx].output_height *
-				plane_cfg[plane_idx].output_width / 2;
+				plane_cfg[plane_idx].output_width;
 		break;
 	case V4L2_PIX_FMT_NV14:
 	case V4L2_PIX_FMT_NV41:
@@ -220,7 +224,7 @@ static uint32_t msm_isp_axi_get_plane_size(
 				plane_cfg[plane_idx].output_width;
 		else
 			size = plane_cfg[plane_idx].output_height *
-				plane_cfg[plane_idx].output_width / 8;
+				plane_cfg[plane_idx].output_width;
 		break;
 	case V4L2_PIX_FMT_NV16:
 	case V4L2_PIX_FMT_NV61:
@@ -326,8 +330,7 @@ int msm_isp_axi_check_stream_state(
 				stream_info->state == PAUSED ||
 				stream_info->state == RESUME_PENDING ||
 				stream_info->state == RESUMING) &&
-				(stream_cfg_cmd->cmd == STOP_STREAM ||
-				stream_cfg_cmd->cmd == STOP_IMMEDIATELY)) {
+				stream_cfg_cmd->cmd == STOP_STREAM) {
 				stream_info->state = ACTIVE;
 			} else {
 				pr_err("%s: Invalid stream state: %d\n",
@@ -405,6 +408,18 @@ void msm_isp_sof_notify(struct vfe_device *vfe_dev,
 	case VFE_PIX_0:
 		ISP_DBG("%s: PIX0 frame id: %lu\n", __func__,
 			vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id);
+		//HTC_START
+		if ((vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id < 3)||
+			(vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id == 10)||
+			((vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id%50) == 0)){
+			pr_info("[CAM]%s:(%d)PIX0 frame id: %lu\n", __func__, vfe_dev->pdev->id,
+				vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id);
+		}
+		//HTC_END
+		//HTC_START, for subcam no ack issue
+		if(vfe_dev->pdev->id == g_subcam_vfe_intf && g_subcam_SOF <100)
+		g_subcam_SOF ++;
+		//HTC_END
 		vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id++;
 		if (vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id == 0)
 			vfe_dev->axi_data.src_info[VFE_PIX_0].frame_id = 1;
@@ -453,6 +468,8 @@ void msm_isp_calculate_framedrop(
 	framedrop_period = msm_isp_get_framedrop_period(
 			stream_cfg_cmd->frame_skip_pattern);
 
+    stream_info->frame_skip_pattern =
+        stream_cfg_cmd->frame_skip_pattern;
 	if (stream_cfg_cmd->frame_skip_pattern == SKIP_ALL)
 		stream_info->framedrop_pattern = 0x0;
 	else
@@ -683,9 +700,7 @@ void msm_isp_axi_stream_update(struct vfe_device *vfe_dev)
 		}
 	}
 
-	if (vfe_dev->axi_data.pipeline_update == DISABLE_CAMIF ||
-		(vfe_dev->axi_data.pipeline_update ==
-		DISABLE_CAMIF_IMMEDIATELY)) {
+	if (vfe_dev->axi_data.pipeline_update == DISABLE_CAMIF) {
 		vfe_dev->hw_info->vfe_ops.stats_ops.
 			enable_module(vfe_dev, 0xFF, 0);
 		vfe_dev->axi_data.pipeline_update = NO_UPDATE;
@@ -889,6 +904,9 @@ static enum msm_isp_camif_update_state
 			pix_stream_cnt++;
 	}
 
+	pr_info("%s: cur_pix_stream_cnt(%d) pix_stream_cnt(%d)\n", __func__,
+		cur_pix_stream_cnt, pix_stream_cnt); /* HTC_sungfeng */
+
 	if (pix_stream_cnt) {
 		if (cur_pix_stream_cnt == 0 && pix_stream_cnt &&
 			stream_cfg_cmd->cmd == START_STREAM)
@@ -897,10 +915,6 @@ static enum msm_isp_camif_update_state
 			(cur_pix_stream_cnt - pix_stream_cnt) == 0 &&
 			stream_cfg_cmd->cmd == STOP_STREAM)
 			return DISABLE_CAMIF;
-		else if (cur_pix_stream_cnt &&
-			(cur_pix_stream_cnt - pix_stream_cnt) == 0 &&
-			stream_cfg_cmd->cmd == STOP_IMMEDIATELY)
-			return DISABLE_CAMIF_IMMEDIATELY;
 	}
 	return NO_UPDATE;
 }
@@ -953,7 +967,7 @@ void msm_camera_io_dump_2(void __iomem *addr, int size)
 	int i;
 	u32 *p = (u32 *) addr;
 	u32 data;
-	ISP_DBG("%s: %p %d\n", __func__, addr, size);
+	pr_info("%s: %p %d\n", __func__, addr, size);
 	line_str[0] = '\0';
 	p_str = line_str;
 	for (i = 0; i < size/4; i++) {
@@ -965,13 +979,13 @@ void msm_camera_io_dump_2(void __iomem *addr, int size)
 		snprintf(p_str, 12, "%08x ", data);
 		p_str += 9;
 		if ((i + 1) % 4 == 0) {
-			ISP_DBG("%s\n", line_str);
+			pr_info("%s\n", line_str);
 			line_str[0] = '\0';
 			p_str = line_str;
 		}
 	}
 	if (line_str[0] != '\0')
-		ISP_DBG("%s\n", line_str);
+		pr_info("%s\n", line_str);
 }
 
 /*Factor in Q2 format*/
@@ -1001,8 +1015,8 @@ static int msm_isp_update_stream_bandwidth(struct vfe_device *vfe_dev)
 	if (num_pix_streams > 0)
 		total_pix_bandwidth = total_pix_bandwidth /
 			num_pix_streams * (num_pix_streams - 1) +
-			axi_data->src_info[VFE_PIX_0].pixel_clock *
-			ISP_DEFAULT_FORMAT_FACTOR / ISP_Q2;
+			((unsigned long)axi_data->src_info[VFE_PIX_0].
+			pixel_clock) * ISP_DEFAULT_FORMAT_FACTOR / ISP_Q2;
 	total_bandwidth = total_pix_bandwidth + total_rdi_bandwidth;
 
 	rc = msm_isp_update_bandwidth(ISP_VFE0 + vfe_dev->pdev->id,
@@ -1024,6 +1038,15 @@ static int msm_isp_axi_wait_for_cfg_done(struct vfe_device *vfe_dev,
 	vfe_dev->axi_data.pipeline_update = camif_update;
 	vfe_dev->axi_data.stream_update = 2;
 	spin_unlock_irqrestore(&vfe_dev->shared_data_lock, flags);
+//HTC_START, for subcam no ack issue
+	if(g_subcam_no_ack == 1 && vfe_dev->pdev->id == g_subcam_vfe_intf)
+	{
+	    rc = wait_for_completion_interruptible_timeout(
+	        &vfe_dev->stream_config_complete,
+	        msecs_to_jiffies(100));
+	}
+	else
+//HTC_END
 	rc = wait_for_completion_interruptible_timeout(
 		&vfe_dev->stream_config_complete,
 		msecs_to_jiffies(VFE_MAX_CFG_TIMEOUT));
@@ -1106,6 +1129,8 @@ static int msm_isp_start_axi_stream(struct vfe_device *vfe_dev,
 		return -EINVAL;
 	}
 
+	pr_info("%s: camif_update(%d)\n", __func__, camif_update); /* HTC_sungfeng */
+
 	for (i = 0; i < stream_cfg_cmd->num_streams; i++) {
 		if (HANDLE_TO_IDX(stream_cfg_cmd->stream_handle[i])
 		> MAX_NUM_STREAM) {
@@ -1168,6 +1193,8 @@ static int msm_isp_stop_axi_stream(struct vfe_device *vfe_dev,
 		return -EINVAL;
 	}
 
+	pr_info("%s: camif_update(%d)\n", __func__, camif_update); /* HTC_sungfeng */
+
 	for (i = 0; i < stream_cfg_cmd->num_streams; i++) {
 		if (HANDLE_TO_IDX(stream_cfg_cmd->stream_handle[i])
 		> MAX_NUM_STREAM) {
@@ -1212,9 +1239,6 @@ static int msm_isp_stop_axi_stream(struct vfe_device *vfe_dev,
 	if (camif_update == DISABLE_CAMIF)
 		vfe_dev->hw_info->vfe_ops.core_ops.
 			update_camif_state(vfe_dev, DISABLE_CAMIF);
-	else if (camif_update == DISABLE_CAMIF_IMMEDIATELY)
-		vfe_dev->hw_info->vfe_ops.core_ops.
-			update_camif_state(vfe_dev, DISABLE_CAMIF_IMMEDIATELY);
 	msm_isp_update_camif_output_count(vfe_dev, stream_cfg_cmd);
 
 	for (i = 0; i < stream_cfg_cmd->num_streams; i++) {

@@ -96,7 +96,7 @@
 		qcom,phase-port = <0x1>;
 		qcom,pfm-port = <0x2>;
 		qcom,saw2-spm-cmd-ret = [00 03 00 0f];
-		qcom,saw2-spm-cmd-gdhs = [00 20 32 6b c0 e0 d0 42 07 50
+		qcom,saw2-spm-cmd-gdhs = [00 20 32 6b c0 e0 d0 42 03 50
 				4e 02 02 d0 e0 c0 22 6b 02 32 50 0f];
 		qcom,saw2-spm-cmd-pc-no-rpm = [00 32 b0 10 e0 d0 6b c0 42 f0
 				11 03 01 b0 50 4e 02 02 c0 d0 12 e0 6b 02 32
@@ -148,11 +148,11 @@
 
 			qcom,system-modes@0 {
 				qcom,l2 = "l2_cache_gdhs";
-				qcom,latency-us = <10700>;
+				qcom,latency-us = <700>;
 				qcom,ss-power = <372>;
 				qcom,energy-overhead = <738750>;
 				qcom,time-overhead = <1410>;
-				qcom,min-cpu-mode= "pc";
+				qcom,min-cpu-mode= "standalone_pc";
 				qcom,sync-cpus;
 			};
 
@@ -174,6 +174,7 @@
 				qcom,time-overhead = <2400>;
 				qcom,min-cpu-mode= "pc";
 				qcom,sync-cpus;
+				qcom,send-rpm-sleep-set;
 			};
 		};
 	};
@@ -222,6 +223,7 @@
 			<0xff 157>, /* sdc2_irq(0) */
 			<0xff 161>, /* lpass_irq_out_spare[4] */
 			<0xff 162>, /* lpass_irq_out_spare[5]*/
+			<0xff 166>,
 			<0xff 170>, /* sdc1_pwr_cmd_irq */
 			<0xff 173>, /* o_wcss_apss_smd_hi */
 			<0xff 174>, /* o_wcss_apss_smd_med */
@@ -295,7 +297,6 @@
 			<38  108>,
 			<39  109>,
 			<40  110>,
-			<41  115>,
 			<54  111>,
 			<55  113>;
 	};
@@ -333,6 +334,13 @@
 		reg = <0xfc19dba0 0x1000>;
 		reg-names = "phys_addr_base";
 		qcom,sleep-stats-version = <2>;
+	};
+
+	qcom,rpm-stats@fc19ffa0{
+		compatible = "qcom,rpm-stats";
+		reg = <0xfc19ffa0 0x60>;
+		reg-names = "phys_addr_base";
+		qcom,sleep-stats-version = <3>;
 	};
 
 	qcom,rpm-rbcpr-stats@fc000000 {

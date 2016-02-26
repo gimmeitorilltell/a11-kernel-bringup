@@ -20,7 +20,16 @@
 #define DEINIT_TYPE			16
 #define USER_SPACE_DATA_TYPE		32
 #define DCI_DATA_TYPE			64
+
 #define CALLBACK_DATA_TYPE		128
+
+/* We always use 64 for the logging mode: UART/QXDM2SD,
+ * however, to not conflict with QCT definition, we shift
+ * the USERMODE_DIAGFWD to 2048
+ */
+#define USERMODE_DIAGFWD		2048
+#define USERMODE_DIAGFWD_LEGACY		64
+
 #define USB_MODE			1
 #define MEMORY_DEVICE_MODE		2
 #define NO_LOGGING_MODE			3
@@ -51,6 +60,8 @@
 #define DIAG_IOCTL_REMOTE_DEV		32
 #define DIAG_IOCTL_VOTE_REAL_TIME	33
 #define DIAG_IOCTL_GET_REAL_TIME	34
+/* HTC: process request non-blocking IO */
+#define DIAG_IOCTL_NONBLOCKING_TIMEOUT 64
 
 /* PC Tools IDs */
 #define APQ8060_TOOLS_ID	4062

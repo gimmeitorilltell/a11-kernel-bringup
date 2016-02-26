@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -341,6 +341,8 @@ static int _rmnet_xmit(struct sk_buff *skb, struct net_device *dev)
 	if (bam_ret != 0 && bam_ret != -EAGAIN && bam_ret != -EFAULT) {
 		pr_err("[%s] %s: write returned error %d",
 			dev->name, __func__, bam_ret);
+		if (RMNET_IS_MODE_QOS(opmode))
+			skb_pull(skb, sizeof(struct QMI_QOS_HDR_S));
 		return -EPERM;
 	}
 
@@ -774,6 +776,12 @@ static int bam_rmnet_remove(struct platform_device *pdev)
 		if (!strncmp(pdev->name, name, BAM_DMUX_CH_NAME_MAX_LEN))
 			break;
 	}
+
+       /*+SSD_RIL: fix klocwork, Buffer Overflow */
+       if (i >= RMNET_DEVICE_COUNT) {
+               return 0;
+       }
+       /*-SSD_RIL: fix klocwork, Buffer Overflow */
 
 	p = netdev_priv(netdevs[i]);
 	p->in_reset = 1;

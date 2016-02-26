@@ -211,8 +211,7 @@ static int hdmi_hdcp_authentication_part1(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 	if (!hdcp_ctrl || !hdcp_ctrl->init_data.core_io ||
 		!hdcp_ctrl->init_data.qfprom_io) {
 		DEV_ERR("%s: invalid input\n", __func__);
-		rc = -EINVAL;
-		goto error;
+		return -EINVAL;
 	}
 
 	if (HDCP_STATE_AUTHENTICATING != hdcp_ctrl->hdcp_state) {
@@ -631,8 +630,7 @@ static int hdmi_hdcp_authentication_part2(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 
 	if (!hdcp_ctrl || !hdcp_ctrl->init_data.core_io) {
 		DEV_ERR("%s: invalid input\n", __func__);
-		rc = -EINVAL;
-		goto error;
+		return -EINVAL;
 	}
 
 	if (HDCP_STATE_AUTHENTICATING != hdcp_ctrl->hdcp_state) {
@@ -1166,6 +1164,9 @@ void hdmi_hdcp_off(void *input)
 			HDCP_STATE_NAME);
 
 	DSS_REG_W(io, HDMI_HDCP_RESET, BIT(0));
+
+	/* Wait to be clean on DDC HW engine */
+	hdmi_hdcp_hw_ddc_clean(hdcp_ctrl);
 
 	/* Disable encryption and disable the HDCP block */
 	DSS_REG_W(io, HDMI_HDCP_CTRL, 0);

@@ -48,7 +48,9 @@
 #else
 #define CDBG(fmt, args...) do { } while (0)
 #endif
-
+//HTC_START, for subcam no ack issue
+int g_subcam_vfe_intf = 0;
+//HTC_END
 static void msm_ispif_io_dump_reg(struct ispif_device *ispif)
 {
 	if (!ispif->enb_dump_reg)
@@ -176,6 +178,7 @@ static int msm_ispif_reset(struct ispif_device *ispif)
 {
 	int rc = 0;
 	int i;
+	pr_err("%s: E\n", __func__);
 
 	BUG_ON(!ispif);
 
@@ -221,6 +224,7 @@ static int msm_ispif_reset(struct ispif_device *ispif)
 	msm_camera_io_w_mb(ISPIF_IRQ_GLOBAL_CLEAR_CMD, ispif->base +
 		ISPIF_IRQ_GLOBAL_CLEAR_CMD_ADDR);
 
+	pr_err("%s: X\n", __func__);
 	return rc;
 }
 
@@ -317,6 +321,7 @@ static void msm_ispif_enable_intf_cids(struct ispif_device *ispif,
 		return;
 	}
 
+	pr_err("%s: intftype %d, vfe_intf %d, enable %d\n", __func__, intftype, vfe_intf, enable);
 	switch (intftype) {
 	case PIX0:
 		intf_addr = ISPIF_VFE_m_PIX_INTF_n_CID_MASK(vfe_intf, 0);
@@ -360,6 +365,7 @@ static int msm_ispif_validate_intf_status(struct ispif_device *ispif,
 		return -EINVAL;
 	}
 
+	pr_err("%s: intftype %d, vfe_intf %d\n", __func__, intftype, vfe_intf);
 	switch (intftype) {
 	case PIX0:
 		data = msm_camera_io_r(ispif->base +
@@ -496,8 +502,14 @@ static int msm_ispif_config(struct ispif_device *ispif,
 		intftype = params->entries[i].intftype;
 
 		vfe_intf = params->entries[i].vfe_intf;
-
-		CDBG("%s intftype %x, vfe_intf %d, csid %d\n", __func__,
+		//HTC_START, for subcam no ack issue
+		if(params->entries[i].csid == 1)
+		{
+		    g_subcam_vfe_intf = vfe_intf;
+		    pr_info(" %s: sub cam  vfe_intf %d\n", __func__,g_subcam_vfe_intf);
+		}
+		//HTC_END
+		pr_err("%s intftype %x, vfe_intf %d, csid %d\n", __func__,
 			intftype, vfe_intf, params->entries[i].csid);
 
 		if ((intftype >= INTF_MAX) ||
@@ -625,6 +637,7 @@ static int msm_ispif_stop_immediately(struct ispif_device *ispif,
 {
 	int i, rc = 0;
 	uint16_t cid_mask = 0;
+	pr_err("%s: E\n", __func__);
 
 	BUG_ON(!ispif);
 	BUG_ON(!params);
@@ -652,6 +665,7 @@ static int msm_ispif_stop_immediately(struct ispif_device *ispif,
 			cid_mask, params->entries[i].vfe_intf, 0);
 	}
 
+	pr_err("%s: X\n", __func__);
 	return rc;
 }
 
@@ -686,6 +700,7 @@ static int msm_ispif_stop_frame_boundary(struct ispif_device *ispif,
 	uint32_t intf_addr;
 	enum msm_ispif_vfe_intf vfe_intf;
 	uint32_t stop_flag = 0;
+	pr_err("%s: E\n", __func__);
 
 	BUG_ON(!ispif);
 	BUG_ON(!params);
@@ -757,6 +772,7 @@ static int msm_ispif_stop_frame_boundary(struct ispif_device *ispif,
 			cid_mask, vfe_intf, 0);
 	}
 
+	pr_err("%s: X\n", __func__);
 end:
 	return rc;
 }
@@ -885,6 +901,7 @@ static int msm_ispif_init(struct ispif_device *ispif,
 	uint32_t csid_version)
 {
 	int rc = 0;
+	pr_err("%s: E", __func__);
 
 	BUG_ON(!ispif);
 
@@ -959,12 +976,14 @@ error_irq:
 	iounmap(ispif->base);
 
 end:
+	pr_err("%s: E", __func__);
 	return rc;
 }
 
 static void msm_ispif_release(struct ispif_device *ispif)
 {
 	BUG_ON(!ispif);
+	pr_err("%s: E", __func__);
 
 	if (ispif->ispif_state != ISPIF_POWER_UP) {
 		pr_err("%s: ispif invalid state %d\n", __func__,
@@ -984,6 +1003,8 @@ static void msm_ispif_release(struct ispif_device *ispif)
 	iounmap(ispif->clk_mux_base);
 
 	ispif->ispif_state = ISPIF_POWER_DOWN;
+
+	pr_err("%s: E", __func__);
 }
 
 static long msm_ispif_cmd(struct v4l2_subdev *sd, void *arg)

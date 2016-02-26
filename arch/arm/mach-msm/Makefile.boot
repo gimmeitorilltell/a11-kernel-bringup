@@ -129,6 +129,15 @@ endif
 	dtb-$(CONFIG_ARCH_MSM8226)	+= apq8026-v2-720p-mtp.dtb
 	dtb-$(CONFIG_ARCH_MSM8226)	+= apq8026-v2-1080p-mtp.dtb
 
+# HTC dtbs
+ifeq ($(CONFIG_MACH_A11_UL), y)
+	htc_dtb-$(CONFIG_ARCH_MSM8226)	+= msm8926-a11ul.dtb
+	htc_dtb-$(CONFIG_ARCH_MSM8226)	+= msm8926-a11chl.dtb
+endif
+ifeq ($(CONFIG_MACH_J1), y)
+	htc_dtb-$(CONFIG_ARCH_MSM8226)	+= msm8926-j1.dtb
+endif
+
 # FSM9XXX
    zreladdr-$(CONFIG_ARCH_FSM9XXX)	:= 0x10008000
 params_phys-$(CONFIG_ARCH_FSM9XXX)	:= 0x10000100
@@ -159,3 +168,18 @@ initrd_phys-$(CONFIG_ARCH_FSM9XXX)	:= 0x12000000
    zreladdr-$(CONFIG_ARCH_MSMSAMARIUM)	:= 0x00008000
 	dtb-$(CONFIG_ARCH_MSMSAMARIUM)	+= msmsamarium-sim.dtb
 	dtb-$(CONFIG_ARCH_MSMSAMARIUM)	+= msmsamarium-rumi.dtb
+
+# HTC dtbs
+ifeq ($(CONFIG_MACH_GLU_U)$(CONFIG_MACH_GLU_WLJ), y)
+	htc_dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v2.0-1-glu-xa.dtb
+	htc_dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v2.0-1-glu-xb.dtb
+	htc_dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v2.2-glu-xb.dtb
+        htc_dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v2.0-1-gluwlj-xa.dtb
+        htc_dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v2.0-1-gluwlj-xb.dtb
+        htc_dtb-$(CONFIG_ARCH_MSM8974)	+= msm8974-v2.2-gluwlj-xb.dtb
+	htc_dtb-$(CONFIG_ARCH_MSM8974)  += msm8974-v2.0-1-glu2-xa.dtb
+	htc_dtb-$(CONFIG_ARCH_MSM8974)  += msm8974-v2.0-1-glu2wlj-xa.dtb
+	htc_dtb-$(CONFIG_ARCH_MSM8974)  += msm8974-v2.2-glu2-xa.dtb
+	htc_dtb-$(CONFIG_ARCH_MSM8974)  += msm8974-v2.2-glu2wlj-xa.dtb
+endif
+

@@ -36,6 +36,7 @@ struct hdmi_tx_platform_data {
 	bool primary;
 	struct dss_io_data io[HDMI_TX_MAX_IO];
 	struct dss_module_power power_data[HDMI_TX_MAX_PM];
+	u16 ddc_ref_clk;
 };
 
 struct hdmi_audio {
@@ -54,7 +55,6 @@ struct hdmi_tx_ctrl {
 	struct hdmi_audio audio_data;
 
 	struct mutex mutex;
-	struct mutex lut_lock;
 	struct kobject *kobj;
 	struct switch_dev sdev;
 	struct switch_dev audio_sdev;

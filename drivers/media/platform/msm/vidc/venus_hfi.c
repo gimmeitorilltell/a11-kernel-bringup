@@ -41,7 +41,9 @@
 #define SHARED_QSIZE 0x1000000
 
 static struct hal_device_data hal_ctxt;
-
+#ifdef REDUCE_KERNEL_ERROR_LOG
+static int kernel_log_Count =0;
+#endif
 static const u32 venus_qdss_entries[][2] = {
 	{0xFC307000, 0x1000},
 	{0xFC322000, 0x1000},
@@ -853,6 +855,7 @@ static inline int venus_hfi_clk_enable(struct venus_hfi_device *device)
 fail_clk_enable:
 	for (i--; i >= 0; i--) {
 		cl = &device->resources.clock[i];
+		usleep(100);
 		clk_disable(cl->clk);
 	}
 	return rc;
@@ -875,6 +878,7 @@ static inline void venus_hfi_clk_disable(struct venus_hfi_device *device)
 
 	for (i = 0; i <= device->clk_gating_level; i++) {
 		cl = &device->resources.clock[i];
+		usleep(100);
 		clk_disable(cl->clk);
 	}
 	device->clocks_enabled = 0;
@@ -1523,16 +1527,11 @@ static int venus_hfi_sys_set_idle_message(struct venus_hfi_device *device,
 	int enable)
 {
 	u8 packet[VIDC_IFACEQ_VAR_SMALL_PKT_SIZE];
-	u32 hw_version;
 	struct hfi_cmd_sys_set_property_packet *pkt =
 		(struct hfi_cmd_sys_set_property_packet *) &packet;
-	hw_version = venus_hfi_read_register(device, VIDC_WRAPPER_HW_VERSION);
-	dprintk(VIDC_DBG, "Venus HW version: 0x%x\n", hw_version);
-	if ((hw_version & 0xFFFF0000) != 0x10030000) {
-		create_pkt_cmd_sys_idle_indicator(pkt, enable);
-		if (venus_hfi_iface_cmdq_write(device, pkt))
-			return -ENOTEMPTY;
-	}
+	create_pkt_cmd_sys_idle_indicator(pkt, enable);
+	if (venus_hfi_iface_cmdq_write(device, pkt))
+		return -ENOTEMPTY;
 	return 0;
 }
 
@@ -1553,9 +1552,6 @@ static int venus_hfi_core_init(void *device)
 
 	dev->intr_status = 0;
 	INIT_LIST_HEAD(&dev->sess_head);
-	mutex_init(&dev->read_lock);
-	mutex_init(&dev->write_lock);
-	mutex_init(&dev->session_lock);
 	venus_hfi_set_registers(dev);
 
 	if (!dev->hal_client) {
@@ -2502,7 +2498,8 @@ static void venus_hfi_pm_hndlr(struct work_struct *work)
 	rc = wait_for_completion_timeout(&pc_prep_done,
 			msecs_to_jiffies(msm_vidc_hw_rsp_timeout));
 	if (!rc) {
-		dprintk(VIDC_ERR, "Wait interrupted or timeout: %d", rc);
+                dprintk(VIDC_ERR, "%s: Wait interrupted or timeout: %d\n",
+                        __func__, rc);
 		return;
 	}
 
@@ -2562,8 +2559,20 @@ static void venus_hfi_process_msg_event_notify(
 		vsfr = (struct hfi_sfr_struct *)
 				device->sfr.align_virtual_addr;
 		if (vsfr)
-			dprintk(VIDC_ERR, "SFR Message from FW : %s",
+		{
+#ifdef REDUCE_KERNEL_ERROR_LOG
+			if(kernel_log_Count<=10)
+			{
+				dprintk(VIDC_ERR, "SFR Message from FW : %s",
 				vsfr->rg_data);
+				kernel_log_Count++;
+			}
+#else
+			dprintk(VIDC_ERR, "SFR Message from FW : %s",
+			vsfr->rg_data);
+
+#endif
+		}
 	}
 }
 static void venus_hfi_response_handler(struct venus_hfi_device *device)
@@ -2796,12 +2805,14 @@ static inline void venus_hfi_disable_clks(struct venus_hfi_device *device)
 	if (device->clocks_enabled) {
 		for (i = VCODEC_CLK; i < VCODEC_MAX_CLKS; i++) {
 			cl = &device->resources.clock[i];
+			usleep(100);
 			clk_disable(cl->clk);
 		}
 	} else {
 		for (i = device->clk_gating_level + 1;
 			i < VCODEC_MAX_CLKS; i++) {
 			cl = &device->resources.clock[i];
+			usleep(100);
 			clk_disable(cl->clk);
 		}
 	}
@@ -2844,6 +2855,7 @@ static inline int venus_hfi_enable_clks(struct venus_hfi_device *device)
 fail_clk_enable:
 	for (; i >= 0; i--) {
 		cl = &device->resources.clock[i];
+		usleep(100);
 		clk_disable_unprepare(cl->clk);
 	}
 	mutex_unlock(&device->clk_pwr_lock);
@@ -3284,7 +3296,6 @@ static int venus_hfi_load_fw(void *dev)
 			__func__, device);
 		return -EINVAL;
 	}
-	mutex_init(&device->clk_pwr_lock);
 	device->clk_gating_level = VCODEC_CLK;
 	rc = venus_hfi_iommu_attach(device);
 	if (rc) {
@@ -3551,6 +3562,11 @@ static void *venus_hfi_add_device(u32 device_id,
 		goto error_createq_pm;
 	}
 
+	mutex_init(&hdevice->read_lock);
+	mutex_init(&hdevice->write_lock);
+	mutex_init(&hdevice->session_lock);
+	mutex_init(&hdevice->clk_pwr_lock);
+
 	if (hal_ctxt.dev_count == 0)
 		INIT_LIST_HEAD(&hal_ctxt.dev_head);
 
@@ -3670,7 +3686,9 @@ int venus_hfi_initialize(struct hfi_device *hdev, u32 device_id,
 		hfi_cmd_response_callback callback)
 {
 	int rc = 0;
-
+#ifdef REDUCE_KERNEL_ERROR_LOG
+	kernel_log_Count=0;
+#endif
 	if (!hdev || !res || !callback) {
 		dprintk(VIDC_ERR, "Invalid params: %p %p %p\n",
 			hdev, res, callback);

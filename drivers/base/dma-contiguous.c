@@ -39,6 +39,8 @@
 #include <linux/dma-contiguous.h>
 #include <trace/events/kmem.h>
 
+#include <htc_debug/stability/htc_report_meminfo.h>
+
 #ifndef SZ_1M
 #define SZ_1M (1 << 20)
 #endif
@@ -454,6 +456,13 @@ phys_addr_t cma_get_base(struct device *dev)
 	return cma->base_pfn << PAGE_SHIFT;
 }
 
+bool cma_area_exist(struct device *dev)
+{
+	struct cma *cma = dev_get_cma_area(dev);
+
+	return (cma != dma_contiguous_def_area);
+}
+
 /**
  * dma_alloc_from_contiguous() - allocate pages from contiguous area
  * @dev:   Pointer to device for which the allocation is performed.
@@ -501,6 +510,7 @@ struct page *dma_alloc_from_contiguous(struct device *dev, int count,
 		if (ret == 0) {
 			bitmap_set(cma->bitmap, pageno, count);
 			page = pfn_to_page(pfn);
+			add_meminfo_total_pages(NR_DMA_PAGES, count);
 			break;
 		} else if (ret != -EBUSY) {
 			break;
@@ -546,6 +556,8 @@ bool dma_release_from_contiguous(struct device *dev, struct page *pages,
 		return false;
 
 	VM_BUG_ON(pfn + count > cma->base_pfn + cma->count);
+
+	sub_meminfo_total_pages(NR_DMA_PAGES, count);
 
 	mutex_lock(&cma_mutex);
 	bitmap_clear(cma->bitmap, pfn - cma->base_pfn, count);

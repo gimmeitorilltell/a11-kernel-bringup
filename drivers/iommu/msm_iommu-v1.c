@@ -10,7 +10,9 @@
  * GNU General Public License for more details.
  */
 
+#define HTCDEBUG
 #define pr_fmt(fmt)	KBUILD_MODNAME ": " fmt
+#include <linux/delay.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
@@ -37,6 +39,10 @@
 
 /* bitmap of the page sizes currently supported */
 #define MSM_IOMMU_PGSIZES	(SZ_4K | SZ_64K | SZ_1M | SZ_16M)
+
+#define IOMMU_MSEC_STEP		20
+#define IOMMU_MSEC_TIMEOUT	1000
+
 
 static DEFINE_MUTEX(msm_iommu_lock);
 struct dump_regs_tbl dump_regs_tbl[MAX_DUMP_REGS];
@@ -173,14 +179,146 @@ void iommu_resume(const struct msm_iommu_drvdata *iommu_drvdata)
 	}
 }
 
+#ifdef HTCDEBUG
+#define STATUS_TIMEOUT (HZ/10)
+#define FLUSH_TIMEOUT (HZ/5)
 static void __sync_tlb(void __iomem *base, int ctx)
 {
+	int i = 0, status = 0;
+	static int failcount = 0;
+	unsigned long timeout;
+
+	SET_TLBSYNC(base, ctx, 0);
+
+	for (i = 10; i > 0; i--) {
+		timeout = jiffies + STATUS_TIMEOUT;
+		/* No barrier needed due to register proximity */
+		while (GET_CB_TLBSTATUS_SACTIVE(base, ctx) && time_before(jiffies, timeout))
+			cpu_relax();
+		status = GET_CB_TLBSTATUS_SACTIVE(base, ctx);
+		if (!status)
+			break;
+		pr_warn("%s: %lu: SACTIVE timeout (base:%p, ctx:%d) status=0x%x\n",
+			__func__, jiffies, base, ctx, status);
+		SET_TLBSYNC(base, ctx, 0);
+	}
+
+	if (i == 0) {
+		/* HTC: iommu already no response over 1 seconds, lets go hell */
+		failcount++;
+		pr_err("%s: fail, counter=%d\n", __func__, failcount);
+		dump_stack();
+		if (failcount > 3) {
+			msleep(1000);
+			panic("IOMMU: __sync_tlb timeout");
+		}
+	}
+
+	/* No barrier needed due to read dependency */
+}
+
+static int __flush_iotlb_va(struct iommu_domain *domain, unsigned int va)
+{
+	struct msm_iommu_priv *priv = domain->priv;
+	struct msm_iommu_drvdata *iommu_drvdata;
+	struct msm_iommu_ctx_drvdata *ctx_drvdata;
+	int ret = 0;
+	unsigned long start0 = jiffies, start = jiffies;
+	int len = 0;
+
+	if (!priv) {
+		ret = -EINVAL;
+		goto fail;
+	}
+
+	list_for_each_entry(ctx_drvdata, &priv->list_attached, attached_elm) {
+		++len;
+		BUG_ON(!ctx_drvdata->pdev || !ctx_drvdata->pdev->dev.parent);
+
+		iommu_drvdata = dev_get_drvdata(ctx_drvdata->pdev->dev.parent);
+		BUG_ON(!iommu_drvdata);
+
+		ret = __enable_clocks(iommu_drvdata);
+		if (ret)
+			goto fail;
+
+		SET_TLBIVA(iommu_drvdata->base, ctx_drvdata->num,
+			   ctx_drvdata->asid | (va & CB_TLBIVA_VA));
+		mb();
+		__sync_tlb(iommu_drvdata->base, ctx_drvdata->num);
+		__disable_clocks(iommu_drvdata);
+
+		if (time_after(jiffies, start + FLUSH_TIMEOUT)) {
+			pr_warn("%s: running too long since %lu to %lu, ctxlength=%d\n",
+				__func__, start0, jiffies, len);
+			pr_warn("%s: domain client: %s, va=0x%x\n",
+				__func__, priv ? priv->client_name : "(null)", va);
+			start = jiffies;
+		}
+	}
+fail:
+	return ret;
+}
+
+static int __flush_iotlb(struct iommu_domain *domain)
+{
+	struct msm_iommu_priv *priv = domain->priv;
+	struct msm_iommu_drvdata *iommu_drvdata;
+	struct msm_iommu_ctx_drvdata *ctx_drvdata;
+	int ret = 0;
+	unsigned long start0 = jiffies, start = jiffies;
+	int len = 0;
+
+	if (!priv) {
+		ret = -EINVAL;
+		goto fail;
+	}
+
+	list_for_each_entry(ctx_drvdata, &priv->list_attached, attached_elm) {
+		++len;
+		BUG_ON(!ctx_drvdata->pdev || !ctx_drvdata->pdev->dev.parent);
+
+		iommu_drvdata = dev_get_drvdata(ctx_drvdata->pdev->dev.parent);
+		BUG_ON(!iommu_drvdata);
+
+		ret = __enable_clocks(iommu_drvdata);
+		if (ret)
+			goto fail;
+
+		SET_TLBIASID(iommu_drvdata->base, ctx_drvdata->num,
+			     ctx_drvdata->asid);
+		mb();
+		__sync_tlb(iommu_drvdata->base, ctx_drvdata->num);
+		__disable_clocks(iommu_drvdata);
+
+		if (time_after(jiffies, start + FLUSH_TIMEOUT)) {
+			pr_warn("%s: running too long since %lu to %lu, ctxlength=%d\n",
+				__func__, start0, jiffies, len);
+			pr_warn("%s: domain client: %s\n",
+				__func__, priv ? priv->client_name : "(null)");
+			start = jiffies;
+		}
+	}
+
+fail:
+	return ret;
+}
+#else
+static void __sync_tlb(void __iomem *base, int ctx)
+{
+	unsigned long timeout = jiffies + msecs_to_jiffies(IOMMU_MSEC_TIMEOUT);
+
 	SET_TLBSYNC(base, ctx, 0);
 
 	/* No barrier needed due to register proximity */
-	while (GET_CB_TLBSTATUS_SACTIVE(base, ctx))
-		cpu_relax();
+	do {
+		if (GET_CB_TLBSTATUS_SACTIVE(base, ctx) == 0)
+			break;
+		else
+			msleep(IOMMU_MSEC_STEP);
+	} while (time_before(jiffies, timeout));
 
+	BUG_ON(jiffies >= timeout);
 	/* No barrier needed due to read dependency */
 }
 
@@ -239,6 +377,7 @@ static int __flush_iotlb(struct iommu_domain *domain)
 fail:
 	return ret;
 }
+#endif
 
 /*
  * May only be called for non-secure iommus
@@ -628,11 +767,14 @@ static void msm_iommu_detach_dev(struct iommu_domain *domain,
 	int ret;
 	int is_secure;
 
+	if (!dev)
+		goto fail_no_lock;
+
 	msm_iommu_detached(dev->parent);
 
 	mutex_lock(&msm_iommu_lock);
 	priv = domain->priv;
-	if (!priv || !dev)
+	if (!priv)
 		goto fail;
 
 	iommu_drvdata = dev_get_drvdata(dev->parent);
@@ -672,6 +814,8 @@ static void msm_iommu_detach_dev(struct iommu_domain *domain,
 	--iommu_drvdata->ctx_attach_count;
 fail:
 	mutex_unlock(&msm_iommu_lock);
+fail_no_lock:
+	return;
 }
 
 static int msm_iommu_map(struct iommu_domain *domain, unsigned long va,
@@ -774,6 +918,7 @@ static phys_addr_t msm_iommu_iova_to_phys(struct iommu_domain *domain,
 	void __iomem *base;
 	phys_addr_t ret = 0;
 	int ctx;
+	int i;
 
 	mutex_lock(&msm_iommu_lock);
 
@@ -796,8 +941,18 @@ static phys_addr_t msm_iommu_iova_to_phys(struct iommu_domain *domain,
 
 	SET_ATS1PR(base, ctx, va & CB_ATS1PR_ADDR);
 	mb();
-	while (GET_CB_ATSR_ACTIVE(base, ctx))
-		cpu_relax();
+	for (i = 0; i < IOMMU_MSEC_TIMEOUT; i += IOMMU_MSEC_STEP)
+		if (GET_CB_ATSR_ACTIVE(base, ctx) == 0)
+			break;
+		else
+			msleep(IOMMU_MSEC_STEP);
+
+	if (i >= IOMMU_MSEC_TIMEOUT) {
+		pr_err("%s: iova to phys timed out on %pa for %s (%s)\n",
+			__func__, &va, iommu_drvdata->name, ctx_drvdata->name);
+		ret = 0;
+		goto fail;
+	}
 
 	par = GET_PAR(base, ctx);
 	__disable_clocks(iommu_drvdata);

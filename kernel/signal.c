@@ -37,6 +37,7 @@
 #include <asm/unistd.h>
 #include <asm/siginfo.h>
 #include <asm/cacheflush.h>
+#include <htc_debug/stability/htc_process_debug.h>
 #include "audit.h"	/* audit_signal_info() */
 
 /*
@@ -1155,10 +1156,68 @@ ret:
 	return ret;
 }
 
+#if defined(CONFIG_HTC_DEBUG_DYING_PROCS)
+#include <linux/proc_fs.h>
+#define MAX_DYING_PROC_COUNT (10)
+struct dying_pid {
+	pid_t pid;
+	unsigned long jiffy;
+};
+static DEFINE_SPINLOCK(dying_pid_lock);
+static struct dying_pid dying_pid_buf[MAX_DYING_PROC_COUNT];
+static unsigned int dying_pid_buf_idx;
+
+static int dying_processors_read_proc(char *page, char **start, off_t off,
+			   int count, int *eof, void *data)
+{
+	char *p = page;
+	unsigned long jiffy = jiffies;
+	unsigned long flags;
+	int i;
+
+	spin_lock_irqsave(&dying_pid_lock, flags);
+	for (i = 0; count > 0 && i < MAX_DYING_PROC_COUNT; i++)
+		if (dying_pid_buf[i].pid) {
+			int writes = scnprintf(p, count,
+					"%ld:%ld\n",
+					(long int) dying_pid_buf[i].pid,
+					jiffy - dying_pid_buf[i].jiffy);
+			count -= writes;
+			p += writes;
+		}
+	spin_unlock_irqrestore(&dying_pid_lock, flags);
+
+	return p - page;
+}
+
+static int __init dying_processors_init(void)
+{
+	memset(dying_pid_buf, 0, sizeof(dying_pid_buf));
+	create_proc_read_entry("dying_processes", 0, NULL,
+			dying_processors_read_proc, NULL);
+	return 0;
+}
+module_init(dying_processors_init);
+#endif
+
 static int send_signal(int sig, struct siginfo *info, struct task_struct *t,
 			int group)
 {
 	int from_ancestor_ns = 0;
+#ifdef CONFIG_HTC_PROCESS_DEBUG
+	send_signal_debug_dump(sig, t);
+#endif
+
+#if defined(CONFIG_HTC_DEBUG_DYING_PROCS)
+	if (sig == SIGKILL) {
+		unsigned long flags;
+		spin_lock_irqsave(&dying_pid_lock, flags);
+		dying_pid_buf_idx = ((dying_pid_buf_idx + 1) % MAX_DYING_PROC_COUNT);
+		dying_pid_buf[dying_pid_buf_idx].pid = t->pid;
+		dying_pid_buf[dying_pid_buf_idx].jiffy = jiffies;
+		spin_unlock_irqrestore(&dying_pid_lock, flags);
+	}
+#endif
 
 #ifdef CONFIG_PID_NS
 	from_ancestor_ns = si_fromuser(info) &&

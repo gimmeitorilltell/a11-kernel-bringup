@@ -200,20 +200,14 @@ irqreturn_t mdss_mdp_isr(int irq, void *ptr)
 		mdss_misr_crc_collect(mdata, DISPLAY_MISR_HDMI);
 	}
 
-	if (isr & MDSS_MDP_INTR_WB_0_DONE) {
+	if (isr & MDSS_MDP_INTR_WB_0_DONE)
 		mdss_mdp_intr_done(MDP_INTR_WB_0);
-		mdss_misr_crc_collect(mdata, DISPLAY_MISR_MDP);
-	}
 
-	if (isr & MDSS_MDP_INTR_WB_1_DONE) {
+	if (isr & MDSS_MDP_INTR_WB_1_DONE)
 		mdss_mdp_intr_done(MDP_INTR_WB_1);
-		mdss_misr_crc_collect(mdata, DISPLAY_MISR_MDP);
-	}
 
-	if (isr & MDSS_MDP_INTR_WB_2_DONE) {
+	if (isr & MDSS_MDP_INTR_WB_2_DONE)
 		mdss_mdp_intr_done(MDP_INTR_WB_2);
-		mdss_misr_crc_collect(mdata, DISPLAY_MISR_MDP);
-	}
 
 mdp_isr_done:
 	hist_isr = MDSS_MDP_REG_READ(MDSS_MDP_REG_HIST_INTR_STATUS);
@@ -465,7 +459,7 @@ int mdss_mdp_put_img(struct mdss_mdp_img_data *data)
 	} else if (data->srcp_file) {
 		pr_debug("pmem buf=0x%x\n", data->addr);
 		data->srcp_file = NULL;
-	} else if (!IS_ERR_OR_NULL(data->srcp_ihdl)) {
+	} else if (!IS_ERR_OR_NULL(data->srcp_ihdl) && iclient) {
 		pr_debug("ion hdl=%p buf=0x%x\n", data->srcp_ihdl, data->addr);
 
 		if (is_mdss_iommu_attached()) {
@@ -474,6 +468,7 @@ int mdss_mdp_put_img(struct mdss_mdp_img_data *data)
 				domain = MDSS_IOMMU_DOMAIN_SECURE;
 			else
 				domain = MDSS_IOMMU_DOMAIN_UNSECURE;
+
 			ion_unmap_iommu(iclient, data->srcp_ihdl,
 					mdss_get_iommu_domain(domain), 0);
 
@@ -598,7 +593,7 @@ int mdss_mdp_calc_phase_step(u32 src, u32 dst, u32 *out_phase)
 		return -EINVAL;
 
 	unit = 1 << PHASE_STEP_SHIFT;
-	*out_phase = mult_frac(unit, src, dst);
+	*out_phase = mult_frac(src, unit, dst);
 
 	/* check if overflow is possible */
 	if (src > dst) {

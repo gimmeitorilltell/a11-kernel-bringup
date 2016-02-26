@@ -594,7 +594,10 @@ wcd9xxx_get_irq_drv_d(const struct wcd9xxx_core_resource *wcd9xxx_res)
 		return NULL;
 
 	domain = irq_find_host(pnode);
+	if (domain != NULL)
 	return (struct wcd9xxx_irq_drv_data *)domain->host_data;
+	else
+		return NULL;
 }
 
 static int phyirq_to_virq(struct wcd9xxx_core_resource *wcd9xxx_res, int offset)
@@ -613,7 +616,10 @@ static int phyirq_to_virq(struct wcd9xxx_core_resource *wcd9xxx_res, int offset)
 static int virq_to_phyirq(struct wcd9xxx_core_resource *wcd9xxx_res, int virq)
 {
 	struct irq_data *irq_data = irq_get_irq_data(virq);
+	if (irq_data != NULL)
 	return irq_data->hwirq;
+	else
+		return 0;
 }
 
 static unsigned int wcd9xxx_irq_get_upstream_irq(
@@ -662,6 +668,10 @@ static int __devinit wcd9xxx_irq_probe(struct platform_device *pdev)
 	} else {
 		dev_dbg(&pdev->dev, "%s: virq = %d\n", __func__, irq);
 		domain = irq_find_host(pdev->dev.of_node);
+		if (domain == NULL) {
+			pr_err("%s: domain is NULL\n", __func__);
+			return -EINVAL;
+		}
 		data = (struct wcd9xxx_irq_drv_data *)domain->host_data;
 		data->irq = irq;
 		wmb();
@@ -677,6 +687,10 @@ static int wcd9xxx_irq_remove(struct platform_device *pdev)
 	struct wcd9xxx_irq_drv_data *data;
 
 	domain = irq_find_host(pdev->dev.of_node);
+	if (domain == NULL) {
+		pr_err("%s: domain is NULL\n", __func__);
+		return -EINVAL;
+	}
 	data = (struct wcd9xxx_irq_drv_data *)domain->host_data;
 	data->irq = 0;
 	wmb();

@@ -120,7 +120,7 @@
 		qcom,phase-port = <0x1>;
 		qcom,pfm-port = <0x2>;
 		qcom,saw2-spm-cmd-ret = [1f 00 03 00 0f];
-		qcom,saw2-spm-cmd-gdhs = [00 32 42 07 44 50 02 32 50 0f];
+		qcom,saw2-spm-cmd-gdhs = [00 32 42 03 44 50 02 32 50 0f];
 		qcom,saw2-spm-cmd-pc = [00 10 32 b0 11 42 07 01 b0 12 44
 				50 02 32 50 0f];
 		qcom,L2-spm-is-apcs-master;
@@ -172,12 +172,13 @@
 
 			qcom,system-mode@0 {
 				qcom,l2 = "l2_cache_gdhs";
-				qcom,latency-us = <20000>;
+				qcom,latency-us = <500>;
 				qcom,ss-power = <163>;
-				qcom,energy-overhead = <1577736>;
-				qcom,time-overhead = <5067>;
-				qcom,min-cpu-mode= "pc";
+				qcom,energy-overhead = <577736>;
+				qcom,time-overhead = <1000>;
+				qcom,min-cpu-mode= "standalone_pc";
 				qcom,sync-cpus;
+
 			};
 
 			qcom,system-mode@1 {
@@ -188,6 +189,7 @@
 				qcom,time-overhead = <6605>;
 				qcom,min-cpu-mode = "pc";
 				qcom,sync-cpus;
+				qcom,send-rpm-sleep-set;
 			};
 		};
 	};
@@ -364,6 +366,13 @@
 		reg = <0xfc000000 0x1a0000>;
 		qcom,start-offset = <0x190010>;
 	};
+
+       qcom,rpm-stats@fc19ffa0{
+                compatible = "qcom,rpm-stats";
+                reg = <0xfc19ffa0 0x60>;
+                reg-names = "phys_addr_base";
+                qcom,sleep-stats-version = <3>;
+        };
 
 	qcom,rpm-master-stats@fc428150 {
 		compatible = "qcom,rpm-master-stats";

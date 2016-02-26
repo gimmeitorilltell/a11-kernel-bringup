@@ -712,12 +712,12 @@ int msm_vidc_release_buffers(void *instance, int buffer_type)
 	struct v4l2_buffer buffer_info;
 	struct v4l2_plane plane[VIDEO_MAX_PLANES];
 	int i, rc = 0;
+	bool release_buf = false;
 
 	if (!inst)
 		return -EINVAL;
 
 	list_for_each_safe(ptr, next, &inst->registered_bufs) {
-		bool release_buf = false;
 		mutex_lock(&inst->lock);
 		bi = list_entry(ptr, struct buffer_info, list);
 		if (bi->type == buffer_type) {
@@ -1036,11 +1036,17 @@ void *msm_vidc_smem_get_client(void *instance)
 {
 	struct msm_vidc_inst *inst = instance;
 
-	if (!inst || !inst->mem_client) {
-		dprintk(VIDC_ERR, "%s: invalid instance or client = %p %p\n",
-				__func__, inst, inst->mem_client);
-		return NULL;
-	}
+        /* HTC_START: Fix klockwork issue */
+        if (!inst) {
+                dprintk(VIDC_ERR, "%s: invalid NULL instance\n", __func__);
+                return NULL;
+        }
+        if (!inst->mem_client) {
+                dprintk(VIDC_ERR, "%s: invalid NULL client (instance: %p)\n",
+                                __func__, inst);
+                return NULL;
+        }
+        /* HTC_END */
 
 	return inst->mem_client;
 }
@@ -1088,8 +1094,6 @@ static int setup_event_queue(void *inst,
 {
 	int rc = 0;
 	struct msm_vidc_inst *vidc_inst = (struct msm_vidc_inst *)inst;
-	spin_lock_init(&pvdev->fh_lock);
-	INIT_LIST_HEAD(&pvdev->fh_list);
 
 	v4l2_fh_init(&vidc_inst->event_handler, pvdev);
 	v4l2_fh_add(&vidc_inst->event_handler);
@@ -1313,7 +1317,7 @@ int msm_vidc_close(void *instance)
 
 	if (!inst)
 		return -EINVAL;
-
+	v4l2_fh_del(&inst->event_handler);
 	list_for_each_safe(ptr, next, &inst->registered_bufs) {
 		bi = list_entry(ptr, struct buffer_info, list);
 		if (bi->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
@@ -1341,6 +1345,9 @@ int msm_vidc_close(void *instance)
 	else if (inst->session_type == MSM_VIDC_ENCODER)
 		msm_venc_ctrl_deinit(inst);
 
+	for (i = 0; i < MAX_PORT_NUM; i++)
+		vb2_queue_release(&inst->bufq[i].vb2_bufq);
+
 	cleanup_instance(inst);
 	if (inst->state != MSM_VIDC_CORE_INVALID &&
 		core->state != VIDC_CORE_INVALID)
@@ -1350,8 +1357,6 @@ int msm_vidc_close(void *instance)
 	if (rc)
 		dprintk(VIDC_ERR,
 			"Failed to move video instance to uninit state\n");
-	for (i = 0; i < MAX_PORT_NUM; i++)
-		vb2_queue_release(&inst->bufq[i].vb2_bufq);
 
 	pr_info(VIDC_DBG_TAG "Closed video instance: %p\n", VIDC_INFO, inst);
 	kfree(inst);
